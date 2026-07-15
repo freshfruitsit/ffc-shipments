@@ -6,12 +6,34 @@ const validShipment = {
   branch_id: "a1b2c3d4-e5f6-4789-a123-456789abcdef",
   supplier_id: "b2c3d4e5-f6a7-4890-b234-56789abcdef0",
   shipment_date: "2026-03-15",
+  responsible: "c3d4e5f6-a7b8-4901-8345-6789abcdef01",
   priority: "Medium",
 };
 
 describe("CreateShipmentSchema", () => {
   it("accepts a minimal valid payload", () => {
     expect(CreateShipmentSchema.safeParse(validShipment).success).toBe(true);
+  });
+
+  it("defaults mode to Air when omitted (Phase 1 wizard doesn't collect it)", () => {
+    const { priority: _p, ...rest } = validShipment;
+    void _p;
+    const result = CreateShipmentSchema.safeParse(rest);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.mode).toBe("Air");
+  });
+
+  it("rejects a missing responsible user (required by the wizard's Basic Info step)", () => {
+    const { responsible: _r, ...rest } = validShipment;
+    void _r;
+    const result = CreateShipmentSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+  });
+
+  it("allows priority to be omitted (the wizard's Basic Info step doesn't collect it — RPC defaults to Medium)", () => {
+    const { priority: _p, ...rest } = validShipment;
+    void _p;
+    expect(CreateShipmentSchema.safeParse(rest).success).toBe(true);
   });
 
   it("accepts Critical as a valid priority (item 5 requirement)", () => {

@@ -256,7 +256,7 @@ export interface Database {
       create_shipment: {
         Args: {
           p_mode: string; p_shipment_date: string; p_category_id: string | null; p_branch_id: string;
-          p_supplier_id: string | null; p_supplier_name: string; p_origin_country_id: string | null; p_priority: string;
+          p_supplier_id: string | null; p_supplier_name: string; p_origin_country_id: string | null; p_priority: string | null;
           p_responsible: string | null; p_internal_ref?: string | null; p_notes?: string | null;
         };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];

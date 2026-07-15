@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { CreateShipmentSchema, AddSupplierSchema } from "@/lib/schemas/shipments";
@@ -9,6 +8,7 @@ import { friendlyRpcError } from "@/lib/actions/errors";
 export type CreateShipmentState = {
   error?: string;
   fieldErrors?: Record<string, string>;
+  createdShipment?: { id: string; ref: string };
 };
 
 
@@ -43,15 +43,15 @@ export async function createShipmentAction(
   }
 
   const { data, error } = await supabase.rpc("create_shipment", {
-    p_mode: "Air",
+    p_mode: parsed.data.mode || "Air",
     p_shipment_date: parsed.data.shipment_date,
     p_category_id: parsed.data.category_id || null,
     p_branch_id: parsed.data.branch_id,
     p_supplier_id: parsed.data.supplier_id || null,
     p_supplier_name: parsed.data.supplier_name || "",
     p_origin_country_id: parsed.data.origin_country_id || null,
-    p_priority: parsed.data.priority,
-    p_responsible: user.id,
+    p_priority: parsed.data.priority || null,
+    p_responsible: parsed.data.responsible,
     p_internal_ref: parsed.data.internal_ref || null,
     p_notes: parsed.data.notes || null,
   });
@@ -60,14 +60,14 @@ export async function createShipmentAction(
     return { error: friendlyRpcError(error.message) };
   }
 
-  // Item 7: confirm a real shipment id came back before redirecting —
-  // don't trust "no error" alone.
+  // Item 7: confirm a real shipment id came back before proceeding — don't
+  // trust "no error" alone.
   if (!data?.id) {
     return { error: "The shipment may not have been created correctly. Please check the register before retrying." };
   }
 
   revalidatePath("/shipments");
-  redirect(`/shipments/${data.id}`);
+  return { createdShipment: { id: data.id, ref: data.ref } };
 }
 
 export type AddSupplierState = {

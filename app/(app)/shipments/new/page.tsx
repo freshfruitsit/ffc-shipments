@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { NewShipmentForm } from "@/components/shipments/new-shipment-form";
-import { getActiveBranches, getShipmentCategories, getCountries } from "@/lib/data/master-data";
+import { CreateShipmentWizard } from "@/components/wizard/create-shipment-wizard";
+import {
+  getActiveBranches, getShipmentCategories, getCountries, getAirlines, getPorts,
+  getFreightAgents, getClearingAgents, getCarriers, getCourierCompanies, getDocumentTypes, getCurrencies,
+} from "@/lib/data/master-data";
 
 export default async function NewShipmentPage() {
   const supabase = await createClient();
@@ -16,46 +19,45 @@ export default async function NewShipmentPage() {
     supabase.rpc("has_permission", { p_permission: "view_all_branches" }),
     supabase.rpc("has_permission", { p_permission: "administer" }),
   ]);
+  if (!canCreate) redirect("/shipments");
 
-  if (!canCreate) {
-    redirect("/shipments");
-  }
+  const { data: profile } = await supabase.from("profiles").select("branch_id").eq("id", user.id).single();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("branch_id")
-    .eq("id", user.id)
-    .single();
-
-  // Item 3: a user without view_all_branches only ever sees their own
-  // branch, pre-selected and effectively fixed — a user WITH it sees every
-  // active branch and picks. Either way, fn_require_branch_access() inside
-  // create_shipment is the real security boundary; this only shapes the UI.
-  // Branch list itself now comes from the shared cache — filtered in JS
-  // rather than re-querying, since the full list is already in hand.
-  const [allBranches, categories, countries, { data: suppliers }] = await Promise.all([
-    getActiveBranches(),
-    getShipmentCategories(),
-    getCountries(),
+  const [
+    allBranches, categories, countries, airlines, ports, freightAgents, clearingAgents,
+    carriers, couriers, documentTypes, currencies, { data: suppliers }, { data: profiles },
+  ] = await Promise.all([
+    getActiveBranches(), getShipmentCategories(), getCountries(), getAirlines(), getPorts(),
+    getFreightAgents(), getClearingAgents(), getCarriers(), getCourierCompanies(), getDocumentTypes(), getCurrencies(),
     supabase.from("suppliers").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("v_assignable_profiles").select("id, full_name").order("full_name"),
   ]);
+
   const branches = canViewAllBranches ? allBranches : allBranches.filter((b) => b.id === profile?.branch_id);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-5xl space-y-1">
       <div>
-        <h1 className="text-xl font-semibold text-ink">New Shipment</h1>
-        <p className="text-sm text-ink-muted">
-          Quick create — transport, invoices, and documents can be added from the shipment page after it&apos;s created.
-        </p>
+        <h1 className="text-xl font-semibold text-ink">Create Shipment</h1>
+        <p className="text-sm text-ink-muted">Structured shipment intake wizard</p>
       </div>
 
-      <NewShipmentForm
+      <CreateShipmentWizard
+        userId={user.id}
         branches={branches}
+        fixedBranchId={canViewAllBranches ? null : profile?.branch_id ?? null}
         categories={categories}
         countries={countries}
+        airlines={airlines}
+        ports={ports}
+        freightAgents={freightAgents}
+        clearingAgents={clearingAgents}
+        carriers={carriers}
+        couriers={couriers}
+        documentTypes={documentTypes}
+        currencies={currencies}
         suppliers={suppliers ?? []}
-        fixedBranchId={canViewAllBranches ? null : profile?.branch_id ?? null}
+        profiles={(profiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
         canAdministerSuppliers={!!canAdminister}
       />
     </div>
