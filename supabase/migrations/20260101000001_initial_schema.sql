@@ -747,16 +747,22 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_shipments_updated_at on shipments;
 create trigger trg_shipments_updated_at before update on shipments
   for each row execute function fn_set_updated_at();
+drop trigger if exists trg_invoices_updated_at on invoices;
 create trigger trg_invoices_updated_at before update on invoices
   for each row execute function fn_set_updated_at();
+drop trigger if exists trg_exceptions_updated_at on exceptions;
 create trigger trg_exceptions_updated_at before update on exceptions
   for each row execute function fn_set_updated_at();
+drop trigger if exists trg_discovery_updated_at on discovery_items;
 create trigger trg_discovery_updated_at before update on discovery_items
   for each row execute function fn_set_updated_at();
+drop trigger if exists trg_branches_updated_at on branches;
 create trigger trg_branches_updated_at before update on branches
   for each row execute function fn_set_updated_at();
+drop trigger if exists trg_suppliers_updated_at on suppliers;
 create trigger trg_suppliers_updated_at before update on suppliers
   for each row execute function fn_set_updated_at();
 
@@ -772,6 +778,7 @@ begin
   return new;
 end;
 $$;
+drop trigger if exists trg_do_received_date on shipments;
 create trigger trg_do_received_date
   before update of delivery_order_status on shipments
   for each row execute function fn_delivery_order_received_date();
@@ -818,6 +825,7 @@ begin
 end;
 $$;
 revoke all on function fn_check_completion_eligibility() from public;
+drop trigger if exists trg_completion_eligibility on shipments;
 create trigger trg_completion_eligibility
   before insert or update of document_status, customs_status, municipality_status,
                              delivery_order_status, mofaic_status, physical_doc_status,
@@ -848,6 +856,7 @@ begin
 end;
 $$;
 revoke all on function fn_notify_completion_eligible() from public;
+drop trigger if exists trg_notify_completion_eligible on shipments;
 create trigger trg_notify_completion_eligible
   after update of document_status, customs_status, municipality_status,
                     delivery_order_status, mofaic_status, physical_doc_status,
@@ -881,6 +890,7 @@ end;
 $$;
 revoke all on function fn_recalc_shipment_eligibility_from_exception() from public;
 
+drop trigger if exists trg_recalc_eligibility_on_exception on exceptions;
 create trigger trg_recalc_eligibility_on_exception
   after insert or update of severity, status on exceptions
   for each row execute function fn_recalc_shipment_eligibility_from_exception();
@@ -902,6 +912,7 @@ end;
 $$;
 revoke all on function fn_recalc_shipment_eligibility_from_resubmission() from public;
 
+drop trigger if exists trg_recalc_eligibility_on_resubmission on resubmission_attempts;
 create trigger trg_recalc_eligibility_on_resubmission
   after insert or update of authority_result on resubmission_attempts
   for each row execute function fn_recalc_shipment_eligibility_from_resubmission();
@@ -980,33 +991,46 @@ end;
 $$;
 revoke all on function fn_audit_trigger() from public;
 
+drop trigger if exists trg_audit_shipments on shipments;
 create trigger trg_audit_shipments after insert or update or delete on shipments
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_invoices on invoices;
 create trigger trg_audit_invoices after insert or update or delete on invoices
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_documents on documents;
 create trigger trg_audit_documents after insert or update or delete on documents
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_document_versions on document_versions;
 create trigger trg_audit_document_versions after insert or update or delete on document_versions
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_exceptions on exceptions;
 create trigger trg_audit_exceptions after insert or update or delete on exceptions
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_resubmissions on resubmission_attempts;
 create trigger trg_audit_resubmissions after insert or update or delete on resubmission_attempts
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_comments on shipment_comments;
 create trigger trg_audit_comments after insert on shipment_comments
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_discovery on discovery_items;
 create trigger trg_audit_discovery after insert or update on discovery_items
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_profiles on profiles;
 create trigger trg_audit_profiles after update on profiles
   for each row execute function fn_audit_trigger();
 -- Item 13 additions: roles/permissions, master data (suppliers is the
 -- built representative admin RPC — the same trigger pattern extends
 -- identically to the other 13 master tables once their admin RPCs are
 -- built in Phase 5), imports, and notifications.
+drop trigger if exists trg_audit_role_permissions on role_permissions;
 create trigger trg_audit_role_permissions after insert or update or delete on role_permissions
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_suppliers on suppliers;
 create trigger trg_audit_suppliers after insert or update on suppliers
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_import_batches on import_batches;
 create trigger trg_audit_import_batches after insert or update on import_batches
   for each row execute function fn_audit_trigger();
+drop trigger if exists trg_audit_notifications on notifications;
 create trigger trg_audit_notifications after insert on notifications
   for each row execute function fn_audit_trigger();

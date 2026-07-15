@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { InfoGrid, InfoItem, TabCard } from "@/components/ui/form";
 import { formatDubaiDate, formatDubaiDateTime } from "@/lib/dates";
 
 export default async function OverviewTab({ params }: { params: Promise<{ id: string }> }) {
@@ -41,27 +42,25 @@ export default async function OverviewTab({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-surface p-6">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
-          <Field label="Internal Reference" value={shipment.internal_ref ?? "—"} />
-          <Field label="Shipment Mode" value={shipment.mode} />
-          <Field label="Category" value={category?.name ?? "—"} />
-          <Field label="Branch" value={branch?.name ?? "—"} />
-          <Field label="Priority" value={shipment.priority} />
-          <Field label="Coordinator" value={coordinatorProfile?.full_name ?? "—"} />
-          <Field label="Created Date" value={formatDubaiDateTime(shipment.created_at)} />
-          <Field label="Packages" value={shipment.packages?.toString() ?? "—"} />
-          <Field label="Net / Gross Weight" value={`${shipment.net_weight ?? "—"} / ${shipment.gross_weight ?? "—"} kg`} />
-        </dl>
+      <TabCard>
+        <InfoGrid>
+          <InfoItem label="Internal Reference">{shipment.internal_ref ?? "—"}</InfoItem>
+          <InfoItem label="Shipment Mode">{shipment.mode}</InfoItem>
+          <InfoItem label="Category">{category?.name ?? "—"}</InfoItem>
+          <InfoItem label="Branch">{branch?.name ?? "—"}</InfoItem>
+          <InfoItem label="Priority">{shipment.priority}</InfoItem>
+          <InfoItem label="Coordinator">{coordinatorProfile?.full_name ?? "—"}</InfoItem>
+          <InfoItem label="Created Date">{formatDubaiDateTime(shipment.created_at)}</InfoItem>
+          <InfoItem label="Packages">{shipment.packages ?? "—"}</InfoItem>
+          <InfoItem label="Net / Gross Weight">{`${shipment.net_weight ?? "—"} / ${shipment.gross_weight ?? "—"} kg`}</InfoItem>
+        </InfoGrid>
 
-        <h4 className="mt-5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Notes</h4>
-        <p className="mt-1 text-sm text-ink">{shipment.notes || "—"}</p>
+        <h4 className="mt-3.5 text-[12.5px] text-ink-muted">Notes</h4>
+        <p className="text-[12.5px] text-ink">{shipment.notes || "—"}</p>
 
-        <h4 className="mt-5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          Related Shipments (same supplier)
-        </h4>
+        <h4 className="mt-3.5 text-[12.5px] text-ink-muted">Related Shipments (same supplier)</h4>
         {!related || related.length === 0 ? (
-          <p className="mt-1 text-sm text-ink-muted">No other shipments from this supplier.</p>
+          <p className="text-[12.5px] text-ink-muted">No other shipments from this supplier.</p>
         ) : (
           <div className="mt-2 overflow-hidden rounded-md border border-border">
             <table className="w-full text-sm">
@@ -88,16 +87,7 @@ export default async function OverviewTab({ params }: { params: Promise<{ id: st
             </table>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
-      <dd className="mt-0.5 text-ink">{value}</dd>
+      </TabCard>
     </div>
   );
 }

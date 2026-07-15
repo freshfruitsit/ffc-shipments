@@ -227,6 +227,18 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Row"]>;
         Relationships: [];
       };
+      fx_rates: {
+        Row: { id: string; currency_code: string; effective_date: string; rate_to_aed: number };
+        Insert: Partial<Database["public"]["Tables"]["fx_rates"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["fx_rates"]["Row"]>;
+        Relationships: [];
+      };
+      mofaic_rules: {
+        Row: { id: number; applicability_threshold_aed: number; payment_window_days: number; is_confirmed: boolean };
+        Insert: Partial<Database["public"]["Tables"]["mofaic_rules"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["mofaic_rules"]["Row"]>;
+        Relationships: [];
+      };
       status_transitions: {
         Row: { from_status: OverallStatus; to_status: OverallStatus; required_permission: string; requires_reason: boolean };
         Insert: Partial<Database["public"]["Tables"]["status_transitions"]["Row"]>;
@@ -347,6 +359,21 @@ export interface Database {
       close_exception: {
         Args: { p_exception_id: string };
         Returns: Database["public"]["Tables"]["exceptions"]["Row"];
+      };
+      replace_document: {
+        Args: {
+          p_document_id: string; p_storage_path: string; p_original_filename: string; p_mime_type: string | null;
+          p_file_size: number; p_sha256_hash: string; p_expiry_date?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["document_versions"]["Row"];
+      };
+      archive_document: {
+        Args: { p_document_version_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["document_versions"]["Row"];
+      };
+      verify_document: {
+        Args: { p_document_version_id: string; p_approve: boolean; p_remarks?: string | null };
+        Returns: Database["public"]["Tables"]["document_versions"]["Row"];
       };
       fn_register_upload_intent: {
         Args: {

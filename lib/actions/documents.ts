@@ -26,12 +26,16 @@ const RegisterSchema = z.object({
  * shipments/{shipment_id}/{document_id}/{filename} convention, and register
  * an upload_intents row via the RPC — this is what the Storage INSERT
  * policy checks before allowing the actual file upload.
+ *
+ * Pass existingDocumentId for a "Replace" flow (new version of an existing
+ * document) — otherwise a fresh document_id is minted for a brand new one.
  */
 export async function registerUploadIntentAction(
   shipmentId: string,
   fileName: string,
   fileSize: number,
-  mimeType: string
+  mimeType: string,
+  existingDocumentId?: string
 ): Promise<RegisterUploadState> {
   const parsed = RegisterSchema.safeParse({ shipment_id: shipmentId, file_name: fileName, file_size: fileSize, mime_type: mimeType });
   if (!parsed.success) {
@@ -39,7 +43,7 @@ export async function registerUploadIntentAction(
   }
 
   const supabase = await createClient();
-  const documentId = randomUUID();
+  const documentId = existingDocumentId ?? randomUUID();
   const safeFileName = parsed.data.file_name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `shipments/${shipmentId}/${documentId}/${safeFileName}`;
 
@@ -116,6 +120,56 @@ export async function getSignedDownloadUrlAction(storagePath: string): Promise<{
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 300);
   if (error || !data) return { error: "Couldn't generate a download link." };
   return { url: data.signedUrl };
+}
+
+const FinalizeReplaceSchema = z.object({
+  shipment_id: z.string().uuid(),
+  document_id: z.string().uuid(),
+  storage_path: z.string().min(1),
+  original_filename: z.string().min(1),
+  mime_type: z.string().optional(),
+  file_size: z.coerce.number().int().positive(),
+  sha256_hash: z.string().min(1),
+});
+
+/** Same two-step contract as finalizeUploadAction, but for a new VERSION of an existing document (replace_document, not upload_document_metadata). */
+export async function finalizeReplaceAction(input: {
+  shipment_id: string;
+  document_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type?: string;
+  file_size: number;
+  sha256_hash: string;
+}): Promise<ActionState> {
+  const parsed = FinalizeReplaceSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: "Invalid upload details." };
+  }
+  const supabase = await createClient();
+  const d = parsed.data;
+  const { error } = await supabase.rpc("replace_document", {
+    p_document_id: d.document_id,
+    p_storage_path: d.storage_path,
+    p_original_filename: d.original_filename,
+    p_mime_type: d.mime_type || null,
+    p_file_size: d.file_size,
+    p_sha256_hash: d.sha256_hash,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${d.shipment_id}/documents`);
+  return { success: true };
+}
+
+export async function archiveDocumentAction(documentVersionId: string, shipmentId: string, reason: string): Promise<ActionState> {
+  if (!reason.trim()) {
+    return { error: "A reason is required to archive a document." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("archive_document", { p_document_version_id: documentVersionId, p_reason: reason });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${shipmentId}/documents`);
+  return { success: true };
 }
 
 export { BUCKET };

@@ -498,6 +498,21 @@ grant select on
   import_batches, import_staging_rows, import_validation_issues, import_monthly_reconciliation
 to authenticated;
 
+-- Item (prototype-parity round bug fix): these 11 reference tables are not
+-- confidential (an airline's name, a port code aren't sensitive, unlike
+-- shipments/profiles/suppliers), so they're also readable by `anon` — this
+-- lets cached, cookie-independent reads (lib/data/master-data.ts) work.
+-- This grant now lives HERE, consolidated with its matching permissive
+-- policy below, specifically so that re-running this file can never again
+-- silently strip it out from underneath a later migration — which is
+-- exactly what happened when this grant previously lived only in a
+-- separate later-run migration file and this file's blanket
+-- "revoke all ... from anon" (above) clobbered it on any re-run.
+grant select on
+  branches, countries, ports, airlines, freight_agents, clearing_agents,
+  carriers, courier_companies, shipment_categories, document_types, currencies
+to anon;
+
 grant insert, update, delete on user_saved_views to authenticated;
 grant update (is_read, read_at) on notifications to authenticated;
 
@@ -549,34 +564,67 @@ alter table import_monthly_reconciliation enable row level security;
 -- ============================================================
 -- SECTION G — READ POLICIES (Section 7 fix: active-profile required)
 -- ============================================================
-create policy p_select_all_authenticated on branches for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on branches;
+drop policy if exists p_select_public on branches;
+create policy p_select_public on branches for select using (true);
+drop policy if exists p_select_all_authenticated on suppliers;
 create policy p_select_all_authenticated on suppliers for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on countries for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on ports for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on airlines for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on freight_agents for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on clearing_agents for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on carriers for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on courier_companies for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on shipment_categories for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on document_types for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on countries;
+drop policy if exists p_select_public on countries;
+create policy p_select_public on countries for select using (true);
+drop policy if exists p_select_all_authenticated on ports;
+drop policy if exists p_select_public on ports;
+create policy p_select_public on ports for select using (true);
+drop policy if exists p_select_all_authenticated on airlines;
+drop policy if exists p_select_public on airlines;
+create policy p_select_public on airlines for select using (true);
+drop policy if exists p_select_all_authenticated on freight_agents;
+drop policy if exists p_select_public on freight_agents;
+create policy p_select_public on freight_agents for select using (true);
+drop policy if exists p_select_all_authenticated on clearing_agents;
+drop policy if exists p_select_public on clearing_agents;
+create policy p_select_public on clearing_agents for select using (true);
+drop policy if exists p_select_all_authenticated on carriers;
+drop policy if exists p_select_public on carriers;
+create policy p_select_public on carriers for select using (true);
+drop policy if exists p_select_all_authenticated on courier_companies;
+drop policy if exists p_select_public on courier_companies;
+create policy p_select_public on courier_companies for select using (true);
+drop policy if exists p_select_all_authenticated on shipment_categories;
+drop policy if exists p_select_public on shipment_categories;
+create policy p_select_public on shipment_categories for select using (true);
+drop policy if exists p_select_all_authenticated on document_types;
+drop policy if exists p_select_public on document_types;
+create policy p_select_public on document_types for select using (true);
+drop policy if exists p_select_all_authenticated on exception_types;
 create policy p_select_all_authenticated on exception_types for select using (fn_is_active_profile());
-create policy p_select_all_authenticated on currencies for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on currencies;
+drop policy if exists p_select_public on currencies;
+create policy p_select_public on currencies for select using (true);
+drop policy if exists p_select_all_authenticated on fx_rates;
 create policy p_select_all_authenticated on fx_rates for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on status_transitions;
 create policy p_select_all_authenticated on status_transitions for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on required_documents;
 create policy p_select_all_authenticated on required_documents for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on mofaic_rules;
 create policy p_select_all_authenticated on mofaic_rules for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on permissions;
 create policy p_select_all_authenticated on permissions for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on role_permissions;
 create policy p_select_all_authenticated on role_permissions for select using (fn_is_active_profile());
+drop policy if exists p_select_all_authenticated on discovery_items;
 create policy p_select_all_authenticated on discovery_items for select using (fn_is_active_profile());
 -- Item 2 fix (round 4 review): the previous policy let any active user read
 -- every OTHER user's complete row (email, deactivation metadata, etc).
 -- Now: a user can read their own full row; system_administrator can read
 -- all rows (needed for user administration). Everyone else uses the safe
 -- view below for assignment dropdowns.
+drop policy if exists p_select_own_profile on profiles;
 create policy p_select_own_profile on profiles for select using (
   fn_is_active_profile() and id = auth.uid()
 );
+drop policy if exists p_select_all_profiles_admin on profiles;
 create policy p_select_all_profiles_admin on profiles for select using (
   fn_is_active_profile() and has_permission('administer')
 );
@@ -597,6 +645,7 @@ from profiles
 where is_active;
 grant select on v_assignable_profiles to authenticated;
 
+drop policy if exists p_select_shipments on shipments;
 create policy p_select_shipments on shipments for select using (
   fn_is_active_profile()
   and (
@@ -604,37 +653,47 @@ create policy p_select_shipments on shipments for select using (
     or branch_id = (select branch_id from profiles where id = auth.uid())
   )
 );
+drop policy if exists p_select_invoices on invoices;
 create policy p_select_invoices on invoices for select using (
   exists (select 1 from shipments s where s.id = invoices.shipment_id)
 );
+drop policy if exists p_select_documents on documents;
 create policy p_select_documents on documents for select using (
   exists (select 1 from shipments s where s.id = documents.shipment_id)
 );
+drop policy if exists p_select_docversions on document_versions;
 create policy p_select_docversions on document_versions for select using (
   exists (select 1 from documents d join shipments s on s.id = d.shipment_id where d.id = document_versions.document_id)
 );
+drop policy if exists p_select_comments on shipment_comments;
 create policy p_select_comments on shipment_comments for select using (
   exists (select 1 from shipments s where s.id = shipment_comments.shipment_id)
 );
+drop policy if exists p_select_exceptions on exceptions;
 create policy p_select_exceptions on exceptions for select using (
   exists (select 1 from shipments s where s.id = exceptions.shipment_id)
 );
+drop policy if exists p_select_resubmissions on resubmission_attempts;
 create policy p_select_resubmissions on resubmission_attempts for select using (
   exists (select 1 from exceptions e join shipments s on s.id = e.shipment_id where e.id = resubmission_attempts.exception_id)
 );
 
+drop policy if exists p_select_own_notifications on notifications;
 create policy p_select_own_notifications on notifications for select using (
   fn_is_active_profile() and recipient = auth.uid()
 );
+drop policy if exists p_update_own_notifications on notifications;
 create policy p_update_own_notifications on notifications for update
   using (fn_is_active_profile() and recipient = auth.uid()) with check (recipient = auth.uid());
 
+drop policy if exists p_manage_own_saved_views on user_saved_views;
 create policy p_manage_own_saved_views on user_saved_views for all
   using (fn_is_active_profile() and owner = auth.uid()) with check (owner = auth.uid());
 
 -- Section 7 fix: audit_log restricted by branch (shipment-scoped events) and
 -- by 'administer' permission (system-level events with no shipment_ref —
 -- profile/role/permission/master-data/import changes).
+drop policy if exists p_select_audit_log on audit_log;
 create policy p_select_audit_log on audit_log for select using (
   fn_is_active_profile()
   and (
@@ -653,9 +712,13 @@ create policy p_select_audit_log on audit_log for select using (
   )
 );
 
+drop policy if exists p_select_import on import_batches;
 create policy p_select_import on import_batches for select using (fn_is_active_profile() and has_permission('administer'));
+drop policy if exists p_select_staging on import_staging_rows;
 create policy p_select_staging on import_staging_rows for select using (fn_is_active_profile() and has_permission('administer'));
+drop policy if exists p_select_issues on import_validation_issues;
 create policy p_select_issues on import_validation_issues for select using (fn_is_active_profile() and has_permission('administer'));
+drop policy if exists p_select_reconciliation on import_monthly_reconciliation;
 create policy p_select_reconciliation on import_monthly_reconciliation for select using (fn_is_active_profile() and has_permission('administer'));
 
 -- ============================================================
@@ -1984,6 +2047,7 @@ grant select on v_shipment_mofaic to authenticated;
 -- that subquery to even execute. Scoped to each user's own intents.
 grant select on upload_intents to authenticated;
 alter table upload_intents enable row level security;
+drop policy if exists p_select_own_upload_intents on upload_intents;
 create policy p_select_own_upload_intents on upload_intents for select
 using (fn_is_active_profile() and (requested_by = auth.uid() or has_permission('administer')));
 
@@ -1996,6 +2060,7 @@ insert into storage.buckets (id, name, public, file_size_limit)
 values ('shipment-documents', 'shipment-documents', false, 52428800)
 on conflict (id) do nothing;
 
+drop policy if exists p_storage_select_documents on storage.objects;
 create policy p_storage_select_documents on storage.objects for select
 using (
   bucket_id = 'shipment-documents'
@@ -2011,6 +2076,7 @@ using (
   )
 );
 
+drop policy if exists p_storage_insert_documents on storage.objects;
 create policy p_storage_insert_documents on storage.objects for insert
 with check (
   bucket_id = 'shipment-documents'
@@ -2209,6 +2275,7 @@ end;
 $$;
 revoke all on function fn_notify_status_events() from public;
 
+drop trigger if exists trg_notify_status_events on shipments;
 create trigger trg_notify_status_events
   after update of customs_status, overall_status on shipments
   for each row execute function fn_notify_status_events();
@@ -2234,6 +2301,7 @@ end;
 $$;
 revoke all on function fn_notify_high_severity_exception() from public;
 
+drop trigger if exists trg_notify_high_severity_exception on exceptions;
 create trigger trg_notify_high_severity_exception
   after insert or update of severity on exceptions
   for each row execute function fn_notify_high_severity_exception();

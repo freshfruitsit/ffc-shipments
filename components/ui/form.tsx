@@ -41,3 +41,20 @@ export function FormSuccess({ message }: { message?: string }) {
     </div>
   );
 }
+
+export function InfoGrid({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-3">{children}</div>;
+}
+
+export function InfoItem({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10.5px] text-ink-muted">{label}</div>
+      <div className="mt-0.5 text-[12.5px] font-semibold text-ink">{children}</div>
+    </div>
+  );
+}
+
+export function TabCard({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-xl border border-border bg-surface p-5">{children}</div>;
+}

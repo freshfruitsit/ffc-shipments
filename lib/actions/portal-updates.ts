@@ -91,6 +91,7 @@ const DeliveryOrderSchema = z.object({
   delivery_order_requested_date: z.string().optional(),
   delivery_order_received_date: z.string().optional(),
   delivery_order_doc_uploaded: z.coerce.boolean().optional(),
+  delivery_order_responsible: z.string().uuid().optional().or(z.literal("")),
   delivery_order_remarks: z.string().trim().optional(),
 });
 
@@ -111,7 +112,7 @@ export async function updateDeliveryOrderAction(_prev: ActionState, formData: Fo
     p_delivery_order_requested_date: d.delivery_order_requested_date || null,
     p_delivery_order_received_date: d.delivery_order_received_date || null,
     p_delivery_order_doc_uploaded: d.delivery_order_doc_uploaded ?? false,
-    p_delivery_order_responsible: null,
+    p_delivery_order_responsible: d.delivery_order_responsible || null,
     p_delivery_order_remarks: d.delivery_order_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
@@ -130,6 +131,7 @@ const MofaicSchema = z.object({
   mofaic_payment_amount: z.coerce.number().optional(),
   mofaic_currency: z.string().trim().optional(),
   mofaic_payment_date: z.string().optional(),
+  mofaic_responsible: z.string().uuid().optional().or(z.literal("")),
   mofaic_remarks: z.string().trim().optional(),
 });
 
@@ -150,7 +152,7 @@ export async function updateMofaicAction(_prev: ActionState, formData: FormData)
     p_mofaic_payment_amount: d.mofaic_payment_amount ?? null,
     p_mofaic_currency: d.mofaic_currency || null,
     p_mofaic_payment_date: d.mofaic_payment_date || null,
-    p_mofaic_responsible: null,
+    p_mofaic_responsible: d.mofaic_responsible || null,
     p_mofaic_remarks: d.mofaic_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
@@ -174,6 +176,7 @@ const PhysicalDocsSchema = z.object({
   dispatch_date: z.string().optional(),
   delivered_date: z.string().optional(),
   pod_received: z.coerce.boolean().optional(),
+  physical_docs_responsible: z.string().uuid().optional().or(z.literal("")),
   physical_docs_remarks: z.string().trim().optional(),
 });
 
@@ -198,7 +201,7 @@ export async function updatePhysicalDocumentsAction(_prev: ActionState, formData
     p_dispatch_date: d.dispatch_date || null,
     p_delivered_date: d.delivered_date || null,
     p_pod_received: d.pod_received ?? false,
-    p_physical_docs_responsible: null,
+    p_physical_docs_responsible: d.physical_docs_responsible || null,
     p_physical_docs_remarks: d.physical_docs_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
