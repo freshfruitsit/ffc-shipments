@@ -2,7 +2,8 @@
 
 import { useState, useRef } from "react";
 import { Loader2 } from "lucide-react";
-import { getSignedDownloadUrlAction, registerUploadIntentAction, finalizeReplaceAction, archiveDocumentAction, BUCKET } from "@/lib/actions/documents";
+import { getSignedDownloadUrlAction, registerUploadIntentAction, finalizeReplaceAction, archiveDocumentAction } from "@/lib/actions/documents";
+import { BUCKET } from "@/lib/storage-constants";
 import { createClient } from "@/lib/supabase/client";
 import { formatDubaiDate } from "@/lib/dates";
 

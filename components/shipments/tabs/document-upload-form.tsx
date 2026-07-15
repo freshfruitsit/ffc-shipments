@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { registerUploadIntentAction, finalizeUploadAction, BUCKET } from "@/lib/actions/documents";
+import { registerUploadIntentAction, finalizeUploadAction } from "@/lib/actions/documents";
+import { BUCKET } from "@/lib/storage-constants";
 import { selectClass } from "@/components/ui/form";
 
 type DocType = { id: string; name: string };

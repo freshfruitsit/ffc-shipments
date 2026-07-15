@@ -6,8 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyRpcError } from "@/lib/actions/errors";
 import type { ActionState } from "@/lib/actions/shipment-detail";
-
-const BUCKET = "shipment-documents";
+import { BUCKET } from "@/lib/storage-constants";
 
 export type RegisterUploadState = {
   error?: string;
@@ -171,5 +170,3 @@ export async function archiveDocumentAction(documentVersionId: string, shipmentI
   revalidatePath(`/shipments/${shipmentId}/documents`);
   return { success: true };
 }
-
-export { BUCKET };
