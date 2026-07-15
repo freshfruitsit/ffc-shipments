@@ -122,7 +122,7 @@ export function TransportUpdateModal({
                 </select>
               </Field>
               <Field label="Clearing Agent">
-                <select name="clearing_agent_id" defaultValue={shipment.clearing_agent_id ?? ""} className={selectClass}>
+                <select name="clearing_agent_id" defaultValue={shipment.clearing_agent_id ?? clearingAgents.find((a) => a.name === "Fresh Fruits Company")?.id ?? ""} className={selectClass}>
                   <option value="">Select agent…</option>
                   {clearingAgents.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>

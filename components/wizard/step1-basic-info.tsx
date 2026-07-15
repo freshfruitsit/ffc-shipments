@@ -164,7 +164,12 @@ export function Step1BasicInfo({
           </select>
         </Field>
         <Field label="Shipment Category" required error={state.fieldErrors?.category_id}>
-          <select name="category_id" required className={inputClass}>
+          <select
+            name="category_id"
+            required
+            defaultValue={categories.find((c) => c.name === "Fresh Fruits and Vegetables")?.id ?? ""}
+            className={inputClass}
+          >
             <option value="">Select category…</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>

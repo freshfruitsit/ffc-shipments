@@ -49,13 +49,20 @@
   --color-success-light: var(--color-success-light);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13.5px;
+}
+
+input,
+select,
+textarea {
+  font-size: 13.5px;
 }
 
 .tabular-nums {

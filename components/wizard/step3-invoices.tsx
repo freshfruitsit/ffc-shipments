@@ -1,23 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { addInvoicesBatchAction } from "@/lib/actions/wizard";
+import { createClient } from "@/lib/supabase/client";
 import { dubaiTodayISODate } from "@/lib/dates";
 
 type InvoiceRow = {
   invoiceNo: string;
   invoiceDate: string;
-  supplier: string;
   invoiceValue: string;
   currency: string;
-  paymentTerms: string;
   remarks: string;
 };
 
-const PAYMENT_TERMS = ["Net 30", "Net 45", "Advance Payment", "Letter of Credit"];
-
 function emptyRow(): InvoiceRow {
-  return { invoiceNo: "", invoiceDate: dubaiTodayISODate(), supplier: "", invoiceValue: "", currency: "AED", paymentTerms: "Net 30", remarks: "" };
+  return { invoiceNo: "", invoiceDate: dubaiTodayISODate(), invoiceValue: "", currency: "AED", remarks: "" };
 }
 
 export function Step3Invoices({
@@ -36,6 +33,21 @@ export function Step3Invoices({
   const [rows, setRows] = useState<InvoiceRow[]>([emptyRow()]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [supplierName, setSupplierName] = useState<string | null>(null);
+
+  // Item: the supplier was already entered in Basic Info — this tab
+  // shows it read-only rather than asking the user to type it again per
+  // invoice row (which is what "auto-fill from Basic Info" actually
+  // means here, not just a silent backend fallback nobody sees).
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("shipments")
+      .select("supplier_name_snapshot")
+      .eq("id", shipmentId)
+      .single()
+      .then(({ data }) => setSupplierName(data?.supplier_name_snapshot ?? null));
+  }, [shipmentId]);
 
   const totalsByCurrency = new Map<string, number>();
   for (const r of rows) {
@@ -62,10 +74,8 @@ export function Step3Invoices({
         nonEmptyRows.map((r) => ({
           invoice_no: r.invoiceNo,
           invoice_date: r.invoiceDate,
-          supplier: r.supplier,
           invoice_value: parseFloat(r.invoiceValue) || 0,
           currency_code: r.currency,
-          payment_terms: r.paymentTerms,
           remarks: r.remarks,
         }))
       );
@@ -106,7 +116,7 @@ export function Step3Invoices({
                 <input type="date" value={row.invoiceDate} onChange={(e) => updateRow(i, { invoiceDate: e.target.value })} className={inputClass} />
               </Field>
               <Field label="Supplier">
-                <input value={row.supplier} onChange={(e) => updateRow(i, { supplier: e.target.value })} className={inputClass} />
+                <input value={supplierName ?? "—"} disabled className={`${inputClass} bg-surface-muted text-ink-muted`} />
               </Field>
               <Field label="Invoice Value" required>
                 <input type="number" min={0} step="0.01" value={row.invoiceValue} onChange={(e) => updateRow(i, { invoiceValue: e.target.value })} className={inputClass} />
@@ -115,13 +125,6 @@ export function Step3Invoices({
                 <select value={row.currency} onChange={(e) => updateRow(i, { currency: e.target.value })} className={inputClass}>
                   {currencies.map((c) => (
                     <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Payment Terms">
-                <select value={row.paymentTerms} onChange={(e) => updateRow(i, { paymentTerms: e.target.value })} className={inputClass}>
-                  {PAYMENT_TERMS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </Field>

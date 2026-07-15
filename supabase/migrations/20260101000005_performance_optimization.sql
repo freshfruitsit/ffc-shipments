@@ -963,3 +963,22 @@ end;
 $$;
 revoke all on function search_active_suppliers(text, int, int) from public;
 grant execute on function search_active_suppliers(text, int, int) to authenticated;
+
+-- ============================================================
+-- SECTION I — Default status values for new shipments
+--
+-- New shipments defaulted municipality/delivery-order/physical-doc
+-- status to 'Not Required', which reads in the register as "this
+-- process doesn't apply to this shipment" — misleading for a shipment
+-- that's simply too new to have that determination made yet. Changed
+-- to each column's closest real "hasn't started" equivalent (the exact
+-- word "Pending" isn't a valid value for every one of these enums).
+--
+-- Deliberately does NOT touch existing rows — a shipment where someone
+-- already determined municipality clearance genuinely doesn't apply
+-- keeps that correct value; only shipments created from now on get the
+-- new default.
+-- ============================================================
+alter table shipments alter column municipality_status set default 'Not Started';
+alter table shipments alter column delivery_order_status set default 'Pending';
+alter table shipments alter column physical_doc_status set default 'Originals Pending';

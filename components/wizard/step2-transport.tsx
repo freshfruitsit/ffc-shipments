@@ -80,7 +80,11 @@ export function Step2Transport({
           </select>
         </Field>
         <Field label="Clearing Agent">
-          <select name="clearing_agent_id" className={inputClass}>
+          <select
+            name="clearing_agent_id"
+            defaultValue={clearingAgents.find((a) => a.name === "Fresh Fruits Company")?.id ?? ""}
+            className={inputClass}
+          >
             <option value="">Select agent…</option>
             {clearingAgents.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>

@@ -1,7 +1,7 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState } from "react";
-import { Leaf } from "lucide-react";
 import { login, type LoginState } from "@/lib/actions/auth";
 
 const initialState: LoginState = {};
@@ -13,8 +13,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-muted px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-white">
-            <Leaf className="h-6 w-6" strokeWidth={2} />
+          <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full shadow-sm">
+            <Image src="/ffc-logo.png" alt="FFC" fill sizes="56px" className="object-contain" priority />
           </span>
           <h1 className="text-lg font-semibold text-ink">FFC Shipments</h1>
           <p className="text-sm text-ink-muted">Sign in to your account</p>

@@ -42,9 +42,6 @@ export function InvoiceForm({ shipmentId, currencies }: { shipmentId: string; cu
             <input name="supplier_reference" className={inputClass} />
           </Field>
         </div>
-        <Field label="Payment terms (optional)">
-          <input name="payment_terms" className={inputClass} />
-        </Field>
         <Field label="Remarks (optional)">
           <textarea name="remarks" rows={2} className={inputClass} />
         </Field>
