@@ -6,21 +6,22 @@ import { CustomsUpdateModal } from "@/components/shipments/tabs/customs-update-m
 import { STATUS_SEVERITY } from "@/lib/prototype-constants";
 import { formatDubaiDate } from "@/lib/dates";
 
+type CustomsData = {
+  ref: string; declaration_no: string | null; customs_status: string;
+  customs_submission_date: string | null; customs_remarks: string | null; can_edit: boolean;
+};
+
 export default async function CustomsTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: shipment, error }, { data: canEdit }] = await Promise.all([
-    supabase
-      .from("shipments")
-      .select("ref, declaration_no, customs_status, customs_submission_date, customs_remarks, overall_status")
-      .eq("id", id)
-      .single(),
-    supabase.rpc("has_permission", { p_permission: "edit_customs" }),
-  ]);
-  if (error || !shipment) notFound();
-
-  const canAct = !!canEdit && shipment.overall_status !== "Completed";
+  const { data, error } = await supabase.rpc("get_shipment_customs_tab", { p_shipment_id: id });
+  if (error) {
+    console.error("[customs-tab] get_shipment_customs_tab failed:", error.message);
+    throw new Error("Couldn't load the customs tab.");
+  }
+  if (!data) notFound();
+  const shipment = data as unknown as CustomsData;
 
   return (
     <TabCard>
@@ -36,7 +37,7 @@ export default async function CustomsTab({ params }: { params: Promise<{ id: str
       <p className="text-[12.5px] text-ink">{shipment.customs_remarks || "—"}</p>
 
       <div className="mt-4">
-        {canAct ? (
+        {shipment.can_edit ? (
           <CustomsUpdateModal shipmentId={id} shipmentRef={shipment.ref} shipment={shipment} />
         ) : (
           <p className="text-xs text-ink-muted">

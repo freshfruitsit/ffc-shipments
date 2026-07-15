@@ -1,39 +1,52 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CreateShipmentWizard } from "@/components/wizard/create-shipment-wizard";
-import {
-  getActiveBranches, getShipmentCategories, getCountries, getAirlines, getPorts,
-  getFreightAgents, getClearingAgents, getCarriers, getCourierCompanies, getDocumentTypes, getCurrencies,
-} from "@/lib/data/master-data";
+
+type FormContext = {
+  user_id: string;
+  fixed_branch_id: string | null;
+  branches: { id: string; name: string }[];
+  permissions: Record<string, boolean>;
+  categories: { id: string; name: string }[];
+  countries: { id: string; name: string }[];
+  ports: { id: string; name: string }[];
+  airlines: { id: string; name: string }[];
+  freight_agents: { id: string; name: string }[];
+  clearing_agents: { id: string; name: string }[];
+  carriers: { id: string; name: string }[];
+  courier_companies: { id: string; name: string }[];
+  document_types: { id: string; name: string }[];
+  currencies: string[];
+};
 
 export default async function NewShipmentPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Item 6 (performance): this page used to fire ~13 separate requests —
+  // 3 has_permission calls, a profile lookup, 11 master-data queries, an
+  // unfiltered v_assignable_profiles query, and a role_permissions join
+  // done client-side. Now it's this one RPC plus the 3 permission-scoped
+  // assignable-profiles calls (which genuinely differ per duty and can't
+  // be collapsed into the same RPC without either fetching every
+  // profile's full permission matrix up front or losing the per-duty
+  // filtering — three is still a large reduction from the old count).
+  const { data, error } = await supabase.rpc("get_new_shipment_form_context");
+  if (error) {
+    console.error("[new-shipment] get_new_shipment_form_context failed:", error.message);
+    redirect("/shipments");
+  }
+  if (!data) redirect("/login");
+  const ctx = data as unknown as FormContext;
 
-  const [{ data: canCreate }, { data: canViewAllBranches }, { data: canAdminister }] = await Promise.all([
-    supabase.rpc("has_permission", { p_permission: "create_draft" }),
-    supabase.rpc("has_permission", { p_permission: "view_all_branches" }),
-    supabase.rpc("has_permission", { p_permission: "administer" }),
-  ]);
-  if (!canCreate) redirect("/shipments");
+  if (!ctx.permissions.create_draft) redirect("/shipments");
 
-  const { data: profile } = await supabase.from("profiles").select("branch_id").eq("id", user.id).single();
-
-  const [
-    allBranches, categories, countries, airlines, ports, freightAgents, clearingAgents,
-    carriers, couriers, documentTypes, currencies, { data: suppliers }, { data: profiles },
-  ] = await Promise.all([
-    getActiveBranches(), getShipmentCategories(), getCountries(), getAirlines(), getPorts(),
-    getFreightAgents(), getClearingAgents(), getCarriers(), getCourierCompanies(), getDocumentTypes(), getCurrencies(),
-    supabase.from("suppliers").select("id, name").eq("is_active", true).order("name"),
-    supabase.from("v_assignable_profiles").select("id, full_name").order("full_name"),
-  ]);
-
-  const branches = canViewAllBranches ? allBranches : allBranches.filter((b) => b.id === profile?.branch_id);
+  const [{ data: deliveryOrderProfiles }, { data: mofaicProfiles }, { data: physicalDocsProfiles }, { data: allProfiles }] =
+    await Promise.all([
+      supabase.rpc("get_assignable_profiles", { p_branch_id: null, p_required_permission: "edit_delivery_order" }),
+      supabase.rpc("get_assignable_profiles", { p_branch_id: null, p_required_permission: "edit_mofaic" }),
+      supabase.rpc("get_assignable_profiles", { p_branch_id: null, p_required_permission: "edit_physical_docs" }),
+      supabase.rpc("get_assignable_profiles", { p_branch_id: null, p_required_permission: null }),
+    ]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-1">
@@ -43,22 +56,24 @@ export default async function NewShipmentPage() {
       </div>
 
       <CreateShipmentWizard
-        userId={user.id}
-        branches={branches}
-        fixedBranchId={canViewAllBranches ? null : profile?.branch_id ?? null}
-        categories={categories}
-        countries={countries}
-        airlines={airlines}
-        ports={ports}
-        freightAgents={freightAgents}
-        clearingAgents={clearingAgents}
-        carriers={carriers}
-        couriers={couriers}
-        documentTypes={documentTypes}
-        currencies={currencies}
-        suppliers={suppliers ?? []}
-        profiles={(profiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
-        canAdministerSuppliers={!!canAdminister}
+        userId={ctx.user_id}
+        branches={ctx.branches}
+        fixedBranchId={ctx.fixed_branch_id}
+        categories={ctx.categories}
+        countries={ctx.countries}
+        airlines={ctx.airlines}
+        ports={ctx.ports}
+        freightAgents={ctx.freight_agents}
+        clearingAgents={ctx.clearing_agents}
+        carriers={ctx.carriers}
+        couriers={ctx.courier_companies}
+        documentTypes={ctx.document_types}
+        currencies={ctx.currencies}
+        profiles={(allProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
+        deliveryOrderProfiles={(deliveryOrderProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
+        mofaicProfiles={(mofaicProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
+        physicalDocsProfiles={(physicalDocsProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
+        canAdministerSuppliers={!!ctx.permissions.administer}
       />
     </div>
   );

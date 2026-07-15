@@ -5,33 +5,27 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { InfoGrid, InfoItem, TabCard } from "@/components/ui/form";
 import { formatDubaiDate, formatDubaiDateTime } from "@/lib/dates";
 
+type OverviewData = {
+  internal_ref: string | null; mode: string; category_name: string | null; branch_name: string | null;
+  priority: string; coordinator_name: string | null; created_at: string; packages: number | null;
+  net_weight: number | null; gross_weight: number | null; notes: string | null; completion_eligible: boolean;
+  related_shipments: { id: string; ref: string; shipment_date: string; overall_status: string }[];
+};
+
 export default async function OverviewTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: shipment, error } = await supabase
-    .from("shipments")
-    .select(
-      "internal_ref, mode, category_id, branch_id, priority, coordinator, created_at, packages, net_weight, gross_weight, notes, supplier_name_snapshot, completion_eligible"
-    )
-    .eq("id", id)
-    .single();
-  if (error || !shipment) notFound();
-
-  const [{ data: category }, { data: branch }, { data: coordinatorProfile }, { data: related }] = await Promise.all([
-    shipment.category_id ? supabase.from("shipment_categories").select("name").eq("id", shipment.category_id).single() : Promise.resolve({ data: null }),
-    supabase.from("branches").select("name").eq("id", shipment.branch_id).single(),
-    shipment.coordinator
-      ? supabase.from("v_assignable_profiles").select("full_name").eq("id", shipment.coordinator).single()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("shipments")
-      .select("id, ref, shipment_date, overall_status")
-      .eq("supplier_name_snapshot", shipment.supplier_name_snapshot)
-      .neq("id", id)
-      .order("shipment_date", { ascending: false })
-      .limit(10),
-  ]);
+  // One RPC replaces what used to be a shipment fetch plus three separate
+  // name lookups (category, branch, coordinator) plus a related-shipments
+  // query — all joined server-side now.
+  const { data, error } = await supabase.rpc("get_shipment_overview_tab", { p_shipment_id: id });
+  if (error) {
+    console.error("[overview-tab] get_shipment_overview_tab failed:", error.message);
+    throw new Error("Couldn't load the overview tab.");
+  }
+  if (!data) notFound();
+  const shipment = data as unknown as OverviewData;
 
   return (
     <div className="space-y-4">
@@ -46,10 +40,10 @@ export default async function OverviewTab({ params }: { params: Promise<{ id: st
         <InfoGrid>
           <InfoItem label="Internal Reference">{shipment.internal_ref ?? "—"}</InfoItem>
           <InfoItem label="Shipment Mode">{shipment.mode}</InfoItem>
-          <InfoItem label="Category">{category?.name ?? "—"}</InfoItem>
-          <InfoItem label="Branch">{branch?.name ?? "—"}</InfoItem>
+          <InfoItem label="Category">{shipment.category_name ?? "—"}</InfoItem>
+          <InfoItem label="Branch">{shipment.branch_name ?? "—"}</InfoItem>
           <InfoItem label="Priority">{shipment.priority}</InfoItem>
-          <InfoItem label="Coordinator">{coordinatorProfile?.full_name ?? "—"}</InfoItem>
+          <InfoItem label="Coordinator">{shipment.coordinator_name ?? "—"}</InfoItem>
           <InfoItem label="Created Date">{formatDubaiDateTime(shipment.created_at)}</InfoItem>
           <InfoItem label="Packages">{shipment.packages ?? "—"}</InfoItem>
           <InfoItem label="Net / Gross Weight">{`${shipment.net_weight ?? "—"} / ${shipment.gross_weight ?? "—"} kg`}</InfoItem>
@@ -59,7 +53,7 @@ export default async function OverviewTab({ params }: { params: Promise<{ id: st
         <p className="text-[12.5px] text-ink">{shipment.notes || "—"}</p>
 
         <h4 className="mt-3.5 text-[12.5px] text-ink-muted">Related Shipments (same supplier)</h4>
-        {!related || related.length === 0 ? (
+        {shipment.related_shipments.length === 0 ? (
           <p className="text-[12.5px] text-ink-muted">No other shipments from this supplier.</p>
         ) : (
           <div className="mt-2 overflow-hidden rounded-md border border-border">
@@ -72,7 +66,7 @@ export default async function OverviewTab({ params }: { params: Promise<{ id: st
                 </tr>
               </thead>
               <tbody>
-                {related.map((r) => (
+                {shipment.related_shipments.map((r) => (
                   <tr key={r.id} className="border-b border-border last:border-0 hover:bg-primary-light/40">
                     <td className="px-3 py-2">
                       <Link href={`/shipments/${r.id}/overview`} className="font-medium text-primary-dark hover:underline">

@@ -6,21 +6,23 @@ import { MunicipalityUpdateModal } from "@/components/shipments/tabs/municipalit
 import { STATUS_SEVERITY } from "@/lib/prototype-constants";
 import { formatDubaiDate } from "@/lib/dates";
 
+type MunicipalityData = {
+  ref: string; municipality_draft_ref: string | null; municipality_submitted_ref: string | null;
+  municipality_status: string; municipality_submission_date: string | null;
+  municipality_completion_date: string | null; municipality_remarks: string | null; can_edit: boolean;
+};
+
 export default async function MunicipalityTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: shipment, error }, { data: canEdit }] = await Promise.all([
-    supabase
-      .from("shipments")
-      .select("ref, municipality_draft_ref, municipality_submitted_ref, municipality_status, municipality_submission_date, municipality_completion_date, municipality_remarks, overall_status")
-      .eq("id", id)
-      .single(),
-    supabase.rpc("has_permission", { p_permission: "edit_customs" }),
-  ]);
-  if (error || !shipment) notFound();
-
-  const canAct = !!canEdit && shipment.overall_status !== "Completed";
+  const { data, error } = await supabase.rpc("get_shipment_municipality_tab", { p_shipment_id: id });
+  if (error) {
+    console.error("[municipality-tab] get_shipment_municipality_tab failed:", error.message);
+    throw new Error("Couldn't load the municipality tab.");
+  }
+  if (!data) notFound();
+  const shipment = data as unknown as MunicipalityData;
 
   return (
     <TabCard>
@@ -38,7 +40,7 @@ export default async function MunicipalityTab({ params }: { params: Promise<{ id
       <p className="text-[12.5px] text-ink">{shipment.municipality_remarks || "—"}</p>
 
       <div className="mt-4">
-        {canAct ? (
+        {shipment.can_edit ? (
           <MunicipalityUpdateModal shipmentId={id} shipmentRef={shipment.ref} shipment={shipment} />
         ) : (
           <p className="text-xs text-ink-muted">

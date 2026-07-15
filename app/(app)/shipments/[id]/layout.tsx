@@ -1,10 +1,22 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { withPerformanceLogging } from "@/lib/performance-logging";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ShipmentTabs } from "@/components/shipments/tabs/shipment-tabs";
 import { ShipmentStepper } from "@/components/shipments/tabs/shipment-stepper";
 import { ShipmentActionBar } from "@/components/shipments/tabs/shipment-action-bar";
 import { formatDubaiDateTime, formatMoney } from "@/lib/dates";
+
+type HeaderContext = {
+  id: string; ref: string; mode: string; overall_status: string; priority: string;
+  supplier_name_snapshot: string; eta: string | null; awb: string | null; flight: string | null;
+  physical_doc_status: string; document_status: string; updated_at: string; completion_eligible: boolean;
+  port_name: string | null; responsible_name: string | null;
+  invoice_totals: Record<string, number>;
+  valid_status_transitions: { to_status: string; requires_reason: boolean }[];
+  open_exception_count: number;
+  permissions: { assign: boolean; approve_status_change: boolean; manage_exceptions: boolean; edit_basic: boolean };
+};
 
 export default async function ShipmentDetailLayout({
   children,
@@ -16,49 +28,29 @@ export default async function ShipmentDetailLayout({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: shipment, error } = await supabase
-    .from("shipments")
-    .select(
-      "ref, mode, shipment_date, supplier_name_snapshot, overall_status, priority, responsible, eta, awb, flight, port_id, physical_doc_status, updated_at, document_status"
-    )
-    .eq("id", id)
-    .single();
+  // Item 6 (performance): this used to be 1 shipment fetch + up to 9 more
+  // parallel requests (port name, responsible-user name, invoice totals,
+  // the FULL assignable-profiles list, status transitions, and 4 separate
+  // has_permission calls) on every single shipment page view. One RPC now
+  // covers all of it except the assignable-profiles list, which moved to
+  // the Assign panel itself and only loads if that panel is opened.
+  const { data, error } = await withPerformanceLogging(
+    "get_shipment_header_context",
+    () => supabase.rpc("get_shipment_header_context", { p_shipment_id: id }),
+    { route: `/shipments/${id}` }
+  );
 
-  if (error || !shipment) {
+  if (error) {
+    console.error("[shipment-header] get_shipment_header_context failed:", error.message);
+  }
+  if (error || !data) {
     notFound();
   }
+  const shipment = data as unknown as HeaderContext;
 
-  const [
-    { data: port },
-    { data: responsibleProfile },
-    { data: invoiceTotals },
-    { data: assignableProfiles },
-    { data: transitions },
-    { data: canAssign },
-    { data: canChangeStatus },
-    { data: canRaiseException },
-    { data: canEdit },
-  ] = await Promise.all([
-    shipment.port_id ? supabase.from("ports").select("name").eq("id", shipment.port_id).single() : Promise.resolve({ data: null }),
-    shipment.responsible
-      ? supabase.from("v_assignable_profiles").select("full_name").eq("id", shipment.responsible).single()
-      : Promise.resolve({ data: null }),
-    supabase.from("invoices").select("invoice_value, currency_code").eq("shipment_id", id),
-    supabase.from("v_assignable_profiles").select("id, full_name").order("full_name"),
-    supabase.from("status_transitions").select("to_status, requires_reason").eq("from_status", shipment.overall_status),
-    supabase.rpc("has_permission", { p_permission: "assign" }),
-    supabase.rpc("has_permission", { p_permission: "approve_status_change" }),
-    supabase.rpc("has_permission", { p_permission: "manage_exceptions" }),
-    supabase.rpc("has_permission", { p_permission: "edit_basic" }),
-  ]);
-
-  const totalsByCurrency = new Map<string, number>();
-  for (const inv of invoiceTotals ?? []) {
-    totalsByCurrency.set(inv.currency_code, (totalsByCurrency.get(inv.currency_code) ?? 0) + inv.invoice_value);
-  }
   const invoiceTotalDisplay =
-    totalsByCurrency.size > 0
-      ? [...totalsByCurrency.entries()].map(([cur, val]) => formatMoney(val, cur)).join(", ")
+    Object.keys(shipment.invoice_totals).length > 0
+      ? Object.entries(shipment.invoice_totals).map(([cur, val]) => formatMoney(val, cur)).join(", ")
       : "—";
 
   return (
@@ -71,13 +63,12 @@ export default async function ShipmentDetailLayout({
           </div>
           <ShipmentActionBar
             shipmentId={id}
-            assignableProfiles={assignableProfiles ?? []}
-            validTransitions={transitions ?? []}
+            validTransitions={shipment.valid_status_transitions}
             permissions={{
-              assign: !!canAssign,
-              changeStatus: !!canChangeStatus,
-              raiseException: !!canRaiseException,
-              edit: !!canEdit,
+              assign: shipment.permissions.assign,
+              changeStatus: shipment.permissions.approve_status_change,
+              raiseException: shipment.permissions.manage_exceptions,
+              edit: shipment.permissions.edit_basic,
             }}
           />
         </div>
@@ -85,11 +76,11 @@ export default async function ShipmentDetailLayout({
         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
           <MetaItem label="Overall Status"><StatusBadge status={shipment.overall_status} /></MetaItem>
           <MetaItem label="Priority"><StatusBadge status={shipment.priority} priority /></MetaItem>
-          <MetaItem label="Responsible User">{responsibleProfile?.full_name ?? "—"}</MetaItem>
-          <MetaItem label="ETA">{formatDubaiDateTime(shipment.eta)}</MetaItem>
+          <MetaItem label="Responsible User">{shipment.responsible_name ?? "—"}</MetaItem>
+          <MetaItem label="ETA">{shipment.eta ? formatDubaiDateTime(shipment.eta) : "—"}</MetaItem>
           <MetaItem label="Total Invoice Value">{invoiceTotalDisplay}</MetaItem>
           <MetaItem label="AWB / Flight">{`${shipment.awb ?? "—"} / ${shipment.flight ?? "—"}`}</MetaItem>
-          <MetaItem label="Port">{port?.name ?? "—"}</MetaItem>
+          <MetaItem label="Port">{shipment.port_name ?? "—"}</MetaItem>
           <MetaItem label="Last Updated">{formatDubaiDateTime(shipment.updated_at)}</MetaItem>
         </div>
 

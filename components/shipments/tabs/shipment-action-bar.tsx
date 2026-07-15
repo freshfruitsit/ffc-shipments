@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useActionState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { assignShipmentAction, changeShipmentStatusAction, type ActionState } from "@/lib/actions/shipment-detail";
 
 type Profile = { id: string; full_name: string };
@@ -11,12 +13,10 @@ const initialState: ActionState = {};
 
 export function ShipmentActionBar({
   shipmentId,
-  assignableProfiles,
   validTransitions,
   permissions,
 }: {
   shipmentId: string;
-  assignableProfiles: Profile[];
   validTransitions: Transition[];
   permissions: { assign: boolean; changeStatus: boolean; raiseException: boolean; edit: boolean };
 }) {
@@ -38,9 +38,7 @@ export function ShipmentActionBar({
       {permissions.assign && (
         <div className="relative">
           <ActionButton label="Assign" onClick={() => setOpenPanel(openPanel === "assign" ? null : "assign")} />
-          {openPanel === "assign" && (
-            <AssignPanel shipmentId={shipmentId} profiles={assignableProfiles} onDone={() => setOpenPanel(null)} />
-          )}
+          {openPanel === "assign" && <AssignPanel shipmentId={shipmentId} onDone={() => setOpenPanel(null)} />}
         </div>
       )}
       {permissions.changeStatus && (
@@ -92,14 +90,27 @@ function ActionButtonLink({ label }: { label: string }) {
 
 function AssignPanel({
   shipmentId,
-  profiles,
   onDone,
 }: {
   shipmentId: string;
-  profiles: Profile[];
   onDone: () => void;
 }) {
   const [state, formAction, pending] = useActionState(assignShipmentAction, initialState);
+  const [profiles, setProfiles] = useState<Profile[] | null>(null);
+
+  useEffect(() => {
+    // Item 6 (performance): this list used to be loaded on every single
+    // shipment page view via the layout, whether or not anyone ever
+    // opened Assign. Fetching it here, once, only when the panel is
+    // actually opened, matches "load assignable users only when the
+    // Assign action is opened."
+    const supabase = createClient();
+    supabase
+      .rpc("get_assignable_profiles", { p_branch_id: null, p_required_permission: null })
+      .then(({ data }) => setProfiles((data ?? []).map((p) => ({ id: p.id, full_name: p.full_name }))));
+  }, []);
+
+  const pathname = usePathname();
 
   useEffect(() => {
     if (state.success) onDone();
@@ -110,28 +121,35 @@ function AssignPanel({
     <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-border bg-surface p-4 shadow-lg">
       <form action={formAction} className="space-y-3">
         <input type="hidden" name="shipment_id" value={shipmentId} />
+        <input type="hidden" name="current_path" value={pathname} />
         {state.error && <p className="text-xs text-danger">{state.error}</p>}
-        <div>
-          <label className="text-xs font-medium text-ink-muted">Responsible</label>
-          <select name="responsible" className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm">
-            <option value="">No change</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>{p.full_name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-ink-muted">Coordinator</label>
-          <select name="coordinator" className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm">
-            <option value="">No change</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>{p.full_name}</option>
-            ))}
-          </select>
-        </div>
+        {profiles === null ? (
+          <p className="text-xs text-ink-muted">Loading…</p>
+        ) : (
+          <>
+            <div>
+              <label className="text-xs font-medium text-ink-muted">Responsible</label>
+              <select name="responsible" className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm">
+                <option value="">No change</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.full_name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-muted">Coordinator</label>
+              <select name="coordinator" className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm">
+                <option value="">No change</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.full_name}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || profiles === null}
           className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save assignment"}

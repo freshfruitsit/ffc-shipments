@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useActionState, useEffect } from "react";
+import { useState, useActionState, useEffect, useRef } from "react";
 import { createShipmentAction, addSupplierAction, type CreateShipmentState, type AddSupplierState } from "@/lib/actions/shipments";
+import { searchSuppliersAction } from "@/lib/actions/supplier-search";
 import { WizardNav } from "@/components/wizard/wizard-nav";
 import { dubaiTodayISODate } from "@/lib/dates";
 
 type Option = { id: string; name: string };
 const initialState: CreateShipmentState = {};
 const initialSupplierState: AddSupplierState = {};
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function Step1BasicInfo({
   userId,
@@ -15,7 +17,6 @@ export function Step1BasicInfo({
   fixedBranchId,
   categories,
   countries,
-  suppliers,
   profiles,
   canAdministerSuppliers,
   onCreated,
@@ -26,18 +27,19 @@ export function Step1BasicInfo({
   fixedBranchId: string | null;
   categories: Option[];
   countries: Option[];
-  suppliers: Option[];
   profiles: Option[];
   canAdministerSuppliers: boolean;
   onCreated: (shipmentId: string, shipmentRef: string) => void;
   onSaveAsDraft: () => void;
 }) {
   const [state, formAction, pending] = useActionState(createShipmentAction, initialState);
-  const [supplierList, setSupplierList] = useState(suppliers);
+  const [supplierResults, setSupplierResults] = useState<Option[]>([]);
+  const [supplierSearchPending, setSupplierSearchPending] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Option | null>(null);
   const [supplierQuery, setSupplierQuery] = useState("");
   const [showSupplierList, setShowSupplierList] = useState(false);
   const [showNotListed, setShowNotListed] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (state.createdShipment) {
@@ -46,9 +48,27 @@ export function Step1BasicInfo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.createdShipment]);
 
-  const filteredSuppliers = supplierQuery.trim()
-    ? supplierList.filter((s) => s.name.toLowerCase().includes(supplierQuery.toLowerCase()))
-    : supplierList;
+  // Item 6 (performance): this no longer filters a preloaded full
+  // supplier list client-side — it searches on demand, server-side,
+  // paginated (search_active_suppliers, max 20 rows), so this form's
+  // initial load never has to pull every supplier in the system just in
+  // case the user starts typing.
+  function handleQueryChange(value: string) {
+    setSelectedSupplier(null);
+    setSupplierQuery(value);
+    setShowSupplierList(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) {
+      setSupplierResults([]);
+      return;
+    }
+    setSupplierSearchPending(true);
+    debounceRef.current = setTimeout(async () => {
+      const results = await searchSuppliersAction(value);
+      setSupplierResults(results);
+      setSupplierSearchPending(false);
+    }, SEARCH_DEBOUNCE_MS);
+  }
 
   const fixedBranch = fixedBranchId ? branches.find((b) => b.id === fixedBranchId) : null;
 
@@ -80,11 +100,7 @@ export function Step1BasicInfo({
             <input
               type="text"
               value={selectedSupplier ? selectedSupplier.name : supplierQuery}
-              onChange={(e) => {
-                setSelectedSupplier(null);
-                setSupplierQuery(e.target.value);
-                setShowSupplierList(true);
-              }}
+              onChange={(e) => handleQueryChange(e.target.value)}
               onFocus={() => setShowSupplierList(true)}
               onBlur={() => setTimeout(() => setShowSupplierList(false), 150)}
               placeholder="Search suppliers…"
@@ -93,22 +109,26 @@ export function Step1BasicInfo({
             />
             <input type="hidden" name="supplier_id" value={selectedSupplier?.id ?? ""} />
           </Field>
-          {showSupplierList && (
+          {showSupplierList && supplierQuery.trim() && (
             <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-surface shadow-md">
-              {filteredSuppliers.length === 0 && <li className="px-3 py-2 text-sm text-ink-muted">No matching suppliers</li>}
-              {filteredSuppliers.map((s) => (
-                <li
-                  key={s.id}
-                  className="cursor-pointer px-3 py-2 text-sm text-ink hover:bg-primary-light"
-                  onMouseDown={() => {
-                    setSelectedSupplier(s);
-                    setSupplierQuery("");
-                    setShowSupplierList(false);
-                  }}
-                >
-                  {s.name}
-                </li>
-              ))}
+              {supplierSearchPending && <li className="px-3 py-2 text-sm text-ink-muted">Searching…</li>}
+              {!supplierSearchPending && supplierResults.length === 0 && (
+                <li className="px-3 py-2 text-sm text-ink-muted">No matching suppliers</li>
+              )}
+              {!supplierSearchPending &&
+                supplierResults.map((s) => (
+                  <li
+                    key={s.id}
+                    className="cursor-pointer px-3 py-2 text-sm text-ink hover:bg-primary-light"
+                    onMouseDown={() => {
+                      setSelectedSupplier(s);
+                      setSupplierQuery("");
+                      setShowSupplierList(false);
+                    }}
+                  >
+                    {s.name}
+                  </li>
+                ))}
             </ul>
           )}
           <button type="button" onClick={() => setShowNotListed((v) => !v)} className="mt-1 text-xs font-medium text-primary-dark hover:underline">
@@ -118,7 +138,6 @@ export function Step1BasicInfo({
             <SupplierNotListed
               canAdminister={canAdministerSuppliers}
               onCreated={(s) => {
-                setSupplierList((list) => [...list, s].sort((a, b) => a.name.localeCompare(b.name)));
                 setSelectedSupplier(s);
                 setShowNotListed(false);
               }}

@@ -39,7 +39,11 @@ export async function updateCustomsAction(_prev: ActionState, formData: FormData
     p_customs_remarks: d.customs_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Every one of these updates shipments.updated_at ("Last Updated" in
+  // the shared header), and physical-doc status specifically also drives
+  // the progress stepper — so all five need the header/layout to refresh,
+  // not just their own tab.
+  revalidatePath(`/shipments/${d.shipment_id}/customs`);
   return { success: true };
 }
 
@@ -78,7 +82,11 @@ export async function updateMunicipalityAction(_prev: ActionState, formData: For
     p_municipality_remarks: d.municipality_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Every one of these updates shipments.updated_at ("Last Updated" in
+  // the shared header), and physical-doc status specifically also drives
+  // the progress stepper — so all five need the header/layout to refresh,
+  // not just their own tab.
+  revalidatePath(`/shipments/${d.shipment_id}/municipality`);
   return { success: true };
 }
 
@@ -116,7 +124,11 @@ export async function updateDeliveryOrderAction(_prev: ActionState, formData: Fo
     p_delivery_order_remarks: d.delivery_order_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Every one of these updates shipments.updated_at ("Last Updated" in
+  // the shared header), and physical-doc status specifically also drives
+  // the progress stepper — so all five need the header/layout to refresh,
+  // not just their own tab.
+  revalidatePath(`/shipments/${d.shipment_id}/delivery-order`);
   return { success: true };
 }
 
@@ -156,7 +168,11 @@ export async function updateMofaicAction(_prev: ActionState, formData: FormData)
     p_mofaic_remarks: d.mofaic_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Every one of these updates shipments.updated_at ("Last Updated" in
+  // the shared header), and physical-doc status specifically also drives
+  // the progress stepper — so all five need the header/layout to refresh,
+  // not just their own tab.
+  revalidatePath(`/shipments/${d.shipment_id}/mofaic`);
   return { success: true };
 }
 
@@ -205,6 +221,10 @@ export async function updatePhysicalDocumentsAction(_prev: ActionState, formData
     p_physical_docs_remarks: d.physical_docs_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Every one of these updates shipments.updated_at ("Last Updated" in
+  // the shared header), and physical-doc status specifically also drives
+  // the progress stepper — so all five need the header/layout to refresh,
+  // not just their own tab.
+  revalidatePath(`/shipments/${d.shipment_id}/physical-documents`);
   return { success: true };
 }

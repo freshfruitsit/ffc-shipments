@@ -2,15 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { WizardStepIndicator } from "@/components/wizard/wizard-step-indicator";
+import { WizardStepSkeleton } from "@/components/wizard/wizard-step-skeleton";
 import { Step1BasicInfo } from "@/components/wizard/step1-basic-info";
-import { Step2Transport } from "@/components/wizard/step2-transport";
-import { Step3Invoices } from "@/components/wizard/step3-invoices";
-import { Step4Documents } from "@/components/wizard/step4-documents";
-import { Step5Customs } from "@/components/wizard/step5-customs";
-import { Step6DeliveryMofaic } from "@/components/wizard/step6-delivery-mofaic";
-import { Step7PhysicalDocs } from "@/components/wizard/step7-physical-docs";
-import { Step8Review } from "@/components/wizard/step8-review";
+
+// Item 7 (performance): steps 2-8 used to all be eagerly bundled into the
+// New Shipment route's initial JS, even though a user only ever sees step
+// 1 on first load. Each of these now becomes its own chunk, fetched only
+// once the wizard actually advances to it — defined at module scope (not
+// inside the component) so the dynamic() wrapper itself isn't recreated
+// on every render, which would otherwise defeat webpack's module caching.
+const Step2Transport = dynamic(() => import("./step2-transport").then((m) => m.Step2Transport), { loading: () => <WizardStepSkeleton /> });
+const Step3Invoices = dynamic(() => import("./step3-invoices").then((m) => m.Step3Invoices), { loading: () => <WizardStepSkeleton /> });
+const Step4Documents = dynamic(() => import("./step4-documents").then((m) => m.Step4Documents), { loading: () => <WizardStepSkeleton /> });
+const Step5Customs = dynamic(() => import("./step5-customs").then((m) => m.Step5Customs), { loading: () => <WizardStepSkeleton /> });
+const Step6DeliveryMofaic = dynamic(() => import("./step6-delivery-mofaic").then((m) => m.Step6DeliveryMofaic), { loading: () => <WizardStepSkeleton /> });
+const Step7PhysicalDocs = dynamic(() => import("./step7-physical-docs").then((m) => m.Step7PhysicalDocs), { loading: () => <WizardStepSkeleton /> });
+const Step8Review = dynamic(() => import("./step8-review").then((m) => m.Step8Review), { loading: () => <WizardStepSkeleton /> });
 
 type Option = { id: string; name: string };
 
@@ -28,8 +37,10 @@ export function CreateShipmentWizard(props: {
   couriers: Option[];
   documentTypes: Option[];
   currencies: string[];
-  suppliers: Option[];
   profiles: Option[];
+  deliveryOrderProfiles: Option[];
+  mofaicProfiles: Option[];
+  physicalDocsProfiles: Option[];
   canAdministerSuppliers: boolean;
 }) {
   const router = useRouter();
@@ -71,7 +82,6 @@ export function CreateShipmentWizard(props: {
             fixedBranchId={props.fixedBranchId}
             categories={props.categories}
             countries={props.countries}
-            suppliers={props.suppliers}
             profiles={props.profiles}
             canAdministerSuppliers={props.canAdministerSuppliers}
             onCreated={handleCreated}
@@ -104,7 +114,8 @@ export function CreateShipmentWizard(props: {
             shipmentId={shipmentId}
             carriers={props.carriers}
             currencies={props.currencies}
-            profiles={props.profiles}
+            deliveryOrderProfiles={props.deliveryOrderProfiles}
+            mofaicProfiles={props.mofaicProfiles}
             onNext={goNext}
             onBack={goBack}
             onSaveAsDraft={handleSaveAsDraft}
@@ -114,7 +125,7 @@ export function CreateShipmentWizard(props: {
           <Step7PhysicalDocs
             shipmentId={shipmentId}
             couriers={props.couriers}
-            profiles={props.profiles}
+            profiles={props.physicalDocsProfiles}
             onNext={goNext}
             onBack={goBack}
             onSaveAsDraft={handleSaveAsDraft}

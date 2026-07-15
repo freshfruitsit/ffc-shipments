@@ -8,6 +8,8 @@
  *   npx supabase gen types typescript --project-id <ref> > lib/types/database.ts
  */
 
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
 export type AppRole =
   | "shipment_data_entry"
   | "documentation_user"
@@ -239,6 +241,12 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mofaic_rules"]["Row"]>;
         Relationships: [];
       };
+      role_permissions: {
+        Row: { role: AppRole; permission: string; allowed: boolean };
+        Insert: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
+        Relationships: [];
+      };
       status_transitions: {
         Row: { from_status: OverallStatus; to_status: OverallStatus; required_permission: string; requires_reason: boolean };
         Insert: Partial<Database["public"]["Tables"]["status_transitions"]["Row"]>;
@@ -262,6 +270,30 @@ export interface Database {
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
       has_permission: { Args: { p_permission: string }; Returns: boolean };
+      get_app_shell_context: { Args: Record<string, never>; Returns: Json };
+      get_dashboard_metrics: { Args: { p_branch_id?: string | null }; Returns: Json };
+      get_shipment_header_context: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_overview_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_invoices_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_transport_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_documents_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_customs_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_municipality_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_delivery_order_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_mofaic_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_physical_documents_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_exceptions_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_comments_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_shipment_activity_tab: { Args: { p_shipment_id: string }; Returns: Json };
+      get_assignable_profiles: {
+        Args: { p_branch_id?: string | null; p_required_permission?: string | null };
+        Returns: { id: string; full_name: string; role: AppRole; branch_id: string | null }[];
+      };
+      get_new_shipment_form_context: { Args: Record<string, never>; Returns: Json };
+      search_active_suppliers: {
+        Args: { p_query?: string | null; p_limit?: number; p_offset?: number };
+        Returns: { id: string; code: string | null; name: string }[];
+      };
       search_shipments: {
         Args: { p_query: string | null; p_status: OverallStatus | null; p_view: string | null; p_page: number; p_page_size: number };
         Returns: {

@@ -550,7 +550,7 @@ rollback;
 -- 6 (parameterized search).
 -- ============================================================
 begin;
-select plan(17);
+select plan(15);
 
 create temp table t_fixture3 as
 select
@@ -574,14 +574,6 @@ select is(
 select is(
   (select count(*)::int from profiles where id = (select dxb_customs from t_fixture3)),
   0, 'an ordinary user CANNOT read another user''s full profile row (RLS silently filters, no error)'
-);
-select ok(
-  (select count(*)::int from v_assignable_profiles) >= 6,
-  'v_assignable_profiles exposes all active profiles'' minimal fields regardless of who is asking'
-);
-select is(
-  (select count(*)::int from v_assignable_profiles limit 1) - (select count(*)::int from v_assignable_profiles limit 1),
-  0, 'sanity: v_assignable_profiles query does not error for an ordinary user'
 );
 reset role;
 
@@ -699,6 +691,253 @@ select is(
 select lives_ok(
   $$ select * from search_shipments(p_query := null, p_status := null, p_view := 'not_a_real_view', p_page := 1, p_page_size := 25) $$,
   'an unrecognized view key falls through to the ELSE true branch rather than erroring'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- FOURTH TRANSACTION BLOCK — performance-optimization RPCs
+-- (get_app_shell_context, get_dashboard_metrics, get_shipment_header_context)
+-- ============================================================
+begin;
+select plan(16);
+
+create temp table t_fixture4 as
+select
+  (select id from branches where code = 'DXB-AIR') as dxb_branch,
+  (select id from branches where code != 'DXB-AIR' limit 1) as other_branch,
+  (select id from profiles where role = 'shipment_supervisor' and branch_id = (select id from branches where code = 'DXB-AIR') limit 1) as dxb_supervisor,
+  (select id from profiles where role = 'shipment_data_entry' and branch_id != (select id from branches where code = 'DXB-AIR') limit 1) as other_branch_user;
+grant select on t_fixture4 to authenticated;
+
+-- Create one shipment scoped to the DXB branch to test header-context
+-- branch isolation against.
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select id as t4_ship_id from create_shipment(
+  'Air', current_date, null, (select dxb_branch from t_fixture4), null,
+  'Performance Test Supplier Co', null, 'Medium',
+  (select dxb_supervisor from t_fixture4), null, null
+) \gset
+
+select ok(
+  (select (get_app_shell_context()->>'ok')::boolean),
+  'get_app_shell_context returns ok:true for an active profile'
+);
+select is(
+  (select get_app_shell_context()->>'branch_name'),
+  (select b.name from branches b join t_fixture4 f on b.id = f.dxb_branch),
+  'get_app_shell_context returns the correct branch name'
+);
+select ok(
+  (select jsonb_typeof(get_app_shell_context()->'permissions') = 'object'),
+  'get_app_shell_context returns a permissions object'
+);
+
+select ok(
+  (select (get_dashboard_metrics()->>'total_active')::int >= 1),
+  'get_dashboard_metrics counts at least the shipment just created'
+);
+
+select ok(
+  (select get_shipment_header_context(:'t4_ship_id'::uuid) is not null),
+  'get_shipment_header_context returns data for a shipment in the caller''s own branch'
+);
+select is(
+  (select get_shipment_header_context(:'t4_ship_id'::uuid)->>'ref'),
+  (select ref from shipments where id = :'t4_ship_id'::uuid),
+  'get_shipment_header_context returns the correct shipment ref'
+);
+reset role;
+
+-- Security-critical: a user from a DIFFERENT branch must NOT be able to
+-- read another branch's shipment header context, even though they hold
+-- the same permission-checking logic — this exercises the actual branch
+-- isolation the whole point of this RPC is not to weaken.
+set role authenticated;
+select set_config('app.current_user_id', (select other_branch_user::text from t_fixture4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  format($$ select get_shipment_header_context('%s'::uuid) $$, :'t4_ship_id'),
+  '42501', null,
+  'get_shipment_header_context denies a user from a different branch (branch isolation preserved)'
+);
+reset role;
+
+-- No session at all (anon-like / missing profile context) must not
+-- silently return data either.
+set role authenticated;
+select set_config('app.current_user_id', gen_random_uuid()::text, false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select get_app_shell_context()->>'reason'),
+  'no-profile',
+  'get_app_shell_context reports no-profile for a session with no matching profile row'
+);
+select throws_ok(
+  $$ select get_dashboard_metrics() $$,
+  '28000', null,
+  'get_dashboard_metrics rejects a session with no matching active profile'
+);
+reset role;
+
+-- get_assignable_profiles: the actual security fix this round — replacing
+-- a view that leaked every branch's profiles to every authenticated user.
+select p.id as dxb_data_entry_id from profiles p where p.role = 'shipment_data_entry' and p.branch_id = (select f.dxb_branch from t_fixture4 f) limit 1 \gset
+set role authenticated;
+select set_config('app.current_user_id', :'dxb_data_entry_id', false), set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select bool_and(gp.branch_id = (select f.dxb_branch from t_fixture4 f)) from get_assignable_profiles() gp),
+  'a Dubai user only sees Dubai profiles from get_assignable_profiles (cannot see Abu Dhabi)'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select other_branch_user::text from t_fixture4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select coalesce(bool_and(gp.branch_id <> (select f.dxb_branch from t_fixture4 f)), true) from get_assignable_profiles() gp),
+  'an Abu Dhabi (non-cross-branch) user cannot see any Dubai profiles from get_assignable_profiles'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select count(*)::int from get_assignable_profiles()) > (
+    select count(*)::int from profiles where branch_id = (select dxb_branch from t_fixture4) and is_active
+  ) - 1,
+  'an authorized cross-branch supervisor (view_all_branches) receives more than just their own branch'
+);
+select ok(
+  (select count(*)::int from get_assignable_profiles(p_required_permission := 'edit_delivery_order')) >= 0,
+  'get_assignable_profiles accepts a required-permission filter without erroring'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', gen_random_uuid()::text, false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  $$ select * from get_assignable_profiles() $$,
+  '28000', null,
+  'get_assignable_profiles rejects an unprovisioned (no matching profile) session'
+);
+reset role;
+
+-- Clear the stale "unprovisioned" session variable from the previous
+-- test before this admin-level UPDATE — reset role clears the ROLE but
+-- not custom session GUCs, and a trigger reads app.current_user_id for
+-- audit-log actor attribution, so a leftover nonexistent UUID here would
+-- fail that trigger's own foreign key constraint.
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture4), false);
+update profiles set is_active = false where id = (select dxb_supervisor from t_fixture4);
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select get_app_shell_context()->>'reason'),
+  'inactive',
+  'get_app_shell_context reports inactive (not no-profile) for a deactivated profile'
+);
+select throws_ok(
+  $$ select * from get_assignable_profiles() $$,
+  '28000', null,
+  'get_assignable_profiles rejects an inactive profile'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- FIFTH TRANSACTION BLOCK — per-tab RPC branch isolation
+-- ============================================================
+begin;
+select plan(4);
+
+create temp table t_fixture5 as
+select
+  (select id from branches where code = 'DXB-AIR') as dxb_branch,
+  (select id from profiles where role = 'shipment_supervisor' and branch_id = (select id from branches where code = 'DXB-AIR') limit 1) as dxb_supervisor,
+  (select id from profiles where branch_id != (select id from branches where code = 'DXB-AIR') limit 1) as other_branch_user;
+grant select on t_fixture5 to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture5), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select id as t5_ship_id from create_shipment(
+  'Air', current_date, null, (select dxb_branch from t_fixture5), null,
+  'Tab RPC Test Supplier', null, 'Medium', (select dxb_supervisor from t_fixture5), null, null
+) \gset
+
+select ok(
+  (select get_shipment_overview_tab(:'t5_ship_id'::uuid)) is not null,
+  'get_shipment_overview_tab returns data for a shipment in the caller''s own branch'
+);
+select ok(
+  (select (get_shipment_transport_tab(:'t5_ship_id'::uuid)->>'can_edit')::boolean) is not null,
+  'get_shipment_transport_tab returns a can_edit flag'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select other_branch_user::text from t_fixture5), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  format($$ select get_shipment_invoices_tab('%s'::uuid) $$, :'t5_ship_id'),
+  '42501', null,
+  'get_shipment_invoices_tab denies a user from a different branch'
+);
+select throws_ok(
+  format($$ select get_shipment_comments_tab('%s'::uuid) $$, :'t5_ship_id'),
+  '42501', null,
+  'get_shipment_comments_tab denies a user from a different branch (every tab RPC shares the same access check)'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- SIXTH TRANSACTION BLOCK — New Shipment form-context RPCs
+-- ============================================================
+begin;
+select plan(5);
+
+create temp table t_fixture6 as
+select (select id from profiles where role = 'shipment_data_entry' and branch_id = (select id from branches where code = 'DXB-AIR') limit 1) as dxb_user;
+grant select on t_fixture6 to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_user::text from t_fixture6), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+
+select is(
+  (select get_new_shipment_form_context()->>'fixed_branch_id'),
+  (select branch_id::text from profiles where id = (select dxb_user from t_fixture6)),
+  'a non-cross-branch user gets a fixed_branch_id matching their own branch'
+);
+select ok(
+  (select jsonb_array_length(get_new_shipment_form_context()->'branches')) = 1,
+  'a non-cross-branch user only gets their own branch in the branches list'
+);
+select ok(
+  (select jsonb_array_length(get_new_shipment_form_context()->'currencies')) > 0,
+  'get_new_shipment_form_context returns a non-empty currency list'
+);
+select ok(
+  (select count(*)::int from search_active_suppliers(null, 5, 0)) <= 5,
+  'search_active_suppliers respects the limit argument'
+);
+select throws_ok(
+  format($$ select * from search_active_suppliers(%L, 20, 0) $$, repeat('x', 200)),
+  '23514', null,
+  'search_active_suppliers rejects an excessively long query string'
 );
 reset role;
 

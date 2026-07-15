@@ -29,9 +29,18 @@ export async function proxy(request: NextRequest) {
     }
   );
 
+  // getClaims() verifies the JWT against the project's JWKS endpoint —
+  // locally via WebCrypto when asymmetric signing keys are configured
+  // (no network call), or by falling back to the same Auth-server round
+  // trip getUser() always makes otherwise. Either way this is a real,
+  // verified check, never a blind trust of an unverified local token —
+  // confirmed against Supabase's own docs before switching, since this is
+  // the kind of change where guessing wrong breaks authentication for
+  // everyone.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: claimsData,
+  } = await supabase.auth.getClaims();
+  const user = claimsData?.claims ? { id: claimsData.claims.sub } : null;
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
   const isAccessDeniedRoute = request.nextUrl.pathname.startsWith("/access-denied");

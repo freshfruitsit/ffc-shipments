@@ -4,66 +4,60 @@ import { DocumentUploadForm } from "@/components/shipments/tabs/document-upload-
 import { DocumentCard } from "@/components/shipments/tabs/document-card";
 import { getDocumentTypes } from "@/lib/data/master-data";
 
+type DocumentsData = {
+  documents: {
+    document_id: string; document_type_name: string; invoice_no: string | null; version_count: number;
+    current_version: {
+      version_number: number; status: string; storage_path: string; original_filename: string;
+      uploaded_at: string; uploaded_by_name: string | null; verified_by_name: string | null; expiry_date: string | null;
+    };
+  }[];
+  can_upload: boolean;
+  can_verify: boolean;
+};
+
 export default async function DocumentsTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: shipment, error } = await supabase.from("shipments").select("overall_status").eq("id", id).single();
-  if (error || !shipment) notFound();
-
-  const [{ data: documents }, documentTypes, { data: canUpload }] = await Promise.all([
-    supabase.from("documents").select("*").eq("shipment_id", id),
+  const [{ data, error }, documentTypes] = await Promise.all([
+    supabase.rpc("get_shipment_documents_tab", { p_shipment_id: id }),
     getDocumentTypes(),
-    supabase.rpc("has_permission", { p_permission: "upload_docs" }),
   ]);
-
-  const documentIds = (documents ?? []).map((d) => d.id);
-  const { data: allVersions } = documentIds.length
-    ? await supabase.from("document_versions").select("*").in("document_id", documentIds).eq("is_current", true)
-    : { data: [] };
-
-  const uploaderIds = [...new Set((allVersions ?? []).map((v) => v.uploaded_by).filter((u): u is string => !!u))];
-  const { data: uploaders } = uploaderIds.length
-    ? await supabase.from("v_assignable_profiles").select("id, full_name").in("id", uploaderIds)
-    : { data: [] };
-  const nameById = new Map((uploaders ?? []).map((u) => [u.id, u.full_name]));
-
-  const typeNameById = new Map(documentTypes.map((t) => [t.id, t.name]));
-  const versionByDocumentId = new Map((allVersions ?? []).map((v) => [v.document_id, v]));
-
-  const canAdd = !!canUpload && shipment.overall_status !== "Completed";
+  if (error) {
+    console.error("[documents-tab] get_shipment_documents_tab failed:", error.message);
+    throw new Error("Couldn't load the documents tab.");
+  }
+  if (!data) notFound();
+  const tab = data as unknown as DocumentsData;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {(!documents || documents.length === 0) && (
+        {tab.documents.length === 0 && (
           <p className="col-span-full rounded-lg border border-dashed border-border bg-surface-muted/40 p-6 text-center text-sm text-ink-muted">
             No documents uploaded yet.
           </p>
         )}
-        {documents?.map((doc) => {
-          const current = versionByDocumentId.get(doc.id);
-          if (!current) return null;
-          return (
-            <DocumentCard
-              key={doc.id}
-              shipmentId={id}
-              documentId={doc.id}
-              typeName={typeNameById.get(doc.document_type_id) ?? "Document"}
-              filename={current.original_filename}
-              versionNumber={current.version_number}
-              status={current.status}
-              uploadedAt={current.uploaded_at}
-              uploadedByName={current.uploaded_by ? nameById.get(current.uploaded_by) ?? "Unknown" : "Unknown"}
-              storagePath={current.storage_path}
-              canEdit={canAdd}
-            />
-          );
-        })}
+        {tab.documents.map((doc) => (
+          <DocumentCard
+            key={doc.document_id}
+            shipmentId={id}
+            documentId={doc.document_id}
+            typeName={doc.document_type_name}
+            filename={doc.current_version.original_filename}
+            versionNumber={doc.current_version.version_number}
+            status={doc.current_version.status}
+            uploadedAt={doc.current_version.uploaded_at}
+            uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
+            storagePath={doc.current_version.storage_path}
+            canEdit={tab.can_upload}
+          />
+        ))}
       </div>
 
-      {canAdd && <DocumentUploadForm shipmentId={id} documentTypes={documentTypes} />}
-      {!canAdd && (
+      {tab.can_upload && <DocumentUploadForm shipmentId={id} documentTypes={documentTypes} />}
+      {!tab.can_upload && (
         <p className="text-xs text-ink-muted">
           You don&apos;t have permission to upload documents, or this shipment is Completed.
         </p>

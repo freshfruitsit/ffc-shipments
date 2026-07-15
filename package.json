@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint",
     "db:types": "supabase gen types typescript --local > lib/types/database.ts",
@@ -24,6 +25,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.10",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

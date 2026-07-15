@@ -49,7 +49,12 @@ export async function updateTransportAction(_prev: ActionState, formData: FormDa
     p_transport_remarks: d.transport_remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Item 9 (performance): targets this specific tab's own path, not the
+  // whole shipment's layout — the header/stepper live in this same route
+  // tree, so they refresh too on next visit to this exact tab, without
+  // forcing every OTHER sibling tab (Customs, MOFAIC, etc.) to also
+  // re-fetch even though their own data didn't change.
+  revalidatePath(`/shipments/${d.shipment_id}/transport`);
   return { success: true };
 }
 
@@ -96,7 +101,8 @@ export async function addInvoiceAction(_prev: ActionState, formData: FormData): 
     p_remarks: d.remarks || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Same pattern as transport — this tab's own path only.
+  revalidatePath(`/shipments/${d.shipment_id}/invoices`);
   return { success: true };
 }
 
@@ -104,6 +110,7 @@ const AssignSchema = z.object({
   shipment_id: z.string().uuid(),
   responsible: z.string().uuid().optional().or(z.literal("")),
   coordinator: z.string().uuid().optional().or(z.literal("")),
+  current_path: z.string().optional(),
 });
 
 export async function assignShipmentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -119,7 +126,13 @@ export async function assignShipmentAction(_prev: ActionState, formData: FormDat
     p_coordinator: d.coordinator || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Item 9 (performance): Assign only changes the header's Responsible
+  // User display — it doesn't affect any tab's own data or its edit
+  // permissions the way a status change does. Targeting the exact tab
+  // the user was on (passed from the client, since Assign is available
+  // from every tab) refreshes the header there without forcing every
+  // OTHER tab to re-fetch too.
+  revalidatePath(d.current_path || `/shipments/${d.shipment_id}/overview`);
   return { success: true };
 }
 
@@ -145,7 +158,14 @@ export async function changeShipmentStatusAction(_prev: ActionState, formData: F
     p_reason: d.reason || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`);
+  // Unlike Assign, this one genuinely needs the wider blast radius: every
+  // tab's edit controls check overall_status !== 'Completed' to decide
+  // whether they're enabled, so a status change can flip that on every
+  // single tab at once, not just change what the header displays. Plus
+  // the register's status column and the dashboard's status-based KPIs.
+  revalidatePath(`/shipments/${d.shipment_id}`, "layout");
+  revalidatePath("/shipments");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

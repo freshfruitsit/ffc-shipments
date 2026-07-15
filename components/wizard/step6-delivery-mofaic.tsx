@@ -12,7 +12,8 @@ export function Step6DeliveryMofaic({
   shipmentId,
   carriers,
   currencies,
-  profiles,
+  deliveryOrderProfiles,
+  mofaicProfiles,
   onNext,
   onBack,
   onSaveAsDraft,
@@ -20,7 +21,8 @@ export function Step6DeliveryMofaic({
   shipmentId: string;
   carriers: Option[];
   currencies: string[];
-  profiles: Option[];
+  deliveryOrderProfiles: Option[];
+  mofaicProfiles: Option[];
   onNext: () => void;
   onBack: () => void;
   onSaveAsDraft: () => void;
@@ -111,7 +113,7 @@ export function Step6DeliveryMofaic({
         <Field label="Responsible User">
           <select value={doResponsible} onChange={(e) => setDoResponsible(e.target.value)} className={inputClass}>
             <option value="">Select user…</option>
-            {profiles.map((p) => (
+            {deliveryOrderProfiles.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -154,7 +156,7 @@ export function Step6DeliveryMofaic({
         <Field label="Responsible User">
           <select value={mofaicResponsible} onChange={(e) => setMofaicResponsible(e.target.value)} className={inputClass}>
             <option value="">Select user…</option>
-            {profiles.map((p) => (
+            {mofaicProfiles.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>

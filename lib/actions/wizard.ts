@@ -56,7 +56,7 @@ export async function addInvoicesBatchAction(
     if (error) rowErrors.push(friendlyRpcError(error.message));
   }
 
-  revalidatePath(`/shipments/${shipmentId}`);
+  revalidatePath(`/shipments/${shipmentId}/invoices`);
   if (rowErrors.length > 0) {
     return { error: `${rowErrors.length} invoice row(s) couldn't be saved: ${rowErrors.join("; ")}`, rowErrors };
   }
