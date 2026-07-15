@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useRef } from "react";
 import { updateTransportAction, type ActionState } from "@/lib/actions/shipment-detail";
 import { WizardNav } from "@/components/wizard/wizard-nav";
 
@@ -29,9 +29,18 @@ export function Step2Transport({
   const [state, formAction, pending] = useActionState(updateTransportAction, initialState);
   const [etaDate, setEtaDate] = useState("");
   const [etaTime, setEtaTime] = useState("");
+  // Save as Draft now submits this exact form too (see wizard-nav.tsx) —
+  // this tracks which button was clicked so the effect below can save
+  // AND still navigate to the shipment's overview once it completes,
+  // instead of the old behavior where "Save as Draft" skipped the save
+  // entirely and just discarded whatever was on this page.
+  const intentRef = useRef<"next" | "draft">("next");
 
   useEffect(() => {
-    if (state.success) onNext();
+    if (state.success) {
+      if (intentRef.current === "draft") onSaveAsDraft();
+      else onNext();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.success]);
 
@@ -102,7 +111,7 @@ export function Step2Transport({
         </Field>
       </div>
 
-      <WizardNav onBack={onBack} onSaveAsDraft={onSaveAsDraft} nextDisabled={pending} nextLabel={pending ? "Saving…" : "Next"} />
+      <WizardNav onBack={onBack} onIntentClick={(intent) => (intentRef.current = intent)} nextDisabled={pending} nextLabel={pending ? "Saving…" : "Next"} />
     </form>
   );
 }

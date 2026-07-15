@@ -51,7 +51,7 @@ export function Step6DeliveryMofaic({
     }
   }
 
-  function handleNext() {
+  function handleSave(intent: "next" | "draft") {
     setError(null);
     startTransition(async () => {
       const doForm = new FormData();
@@ -82,7 +82,8 @@ export function Step6DeliveryMofaic({
         return;
       }
 
-      onNext();
+      if (intent === "draft") onSaveAsDraft();
+      else onNext();
     });
   }
 
@@ -169,14 +170,14 @@ export function Step6DeliveryMofaic({
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
-        <button type="button" onClick={onSaveAsDraft} className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted">
-          Save as Draft
+        <button type="button" onClick={() => handleSave("draft")} disabled={pending} className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted disabled:opacity-60">
+          {pending ? "Saving…" : "Save as Draft"}
         </button>
         <div className="flex gap-2">
           <button type="button" onClick={onBack} className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted">
             Back
           </button>
-          <button type="button" onClick={handleNext} disabled={pending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-60">
+          <button type="button" onClick={() => handleSave("next")} disabled={pending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-60">
             {pending ? "Saving…" : "Next"}
           </button>
         </div>

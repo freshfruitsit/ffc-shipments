@@ -19,8 +19,8 @@ export function Step1BasicInfo({
   countries,
   profiles,
   canAdministerSuppliers,
-  onCreated,
-  onSaveAsDraft,
+  onCreatedAndAdvance,
+  onCreatedAndExit,
 }: {
   userId: string;
   branches: Option[];
@@ -29,8 +29,8 @@ export function Step1BasicInfo({
   countries: Option[];
   profiles: Option[];
   canAdministerSuppliers: boolean;
-  onCreated: (shipmentId: string, shipmentRef: string) => void;
-  onSaveAsDraft: () => void;
+  onCreatedAndAdvance: (shipmentId: string, shipmentRef: string) => void;
+  onCreatedAndExit: (shipmentId: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(createShipmentAction, initialState);
   const [supplierResults, setSupplierResults] = useState<Option[]>([]);
@@ -40,10 +40,20 @@ export function Step1BasicInfo({
   const [showSupplierList, setShowSupplierList] = useState(false);
   const [showNotListed, setShowNotListed] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks which button was actually clicked — "Save as Draft" now
+  // submits the exact same form as "Next" (so whatever was typed here
+  // actually gets saved instead of silently discarded), and this is what
+  // tells the effect below which of the two follow-up actions to take
+  // once the save completes.
+  const intentRef = useRef<"next" | "draft">("next");
 
   useEffect(() => {
     if (state.createdShipment) {
-      onCreated(state.createdShipment.id, state.createdShipment.ref);
+      if (intentRef.current === "draft") {
+        onCreatedAndExit(state.createdShipment.id);
+      } else {
+        onCreatedAndAdvance(state.createdShipment.id, state.createdShipment.ref);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.createdShipment]);
@@ -192,7 +202,12 @@ export function Step1BasicInfo({
         </Field>
       </div>
 
-      <WizardNav onSaveAsDraft={onSaveAsDraft} showBack={false} nextDisabled={pending} nextLabel={pending ? "Creating…" : "Next"} />
+      <WizardNav
+        onIntentClick={(intent) => (intentRef.current = intent)}
+        showBack={false}
+        nextDisabled={pending}
+        nextLabel={pending ? "Creating…" : "Next"}
+      />
     </form>
   );
 }

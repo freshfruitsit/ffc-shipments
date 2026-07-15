@@ -57,10 +57,14 @@ export function CreateShipmentWizard(props: {
   function goToStep(n: number) {
     setStep(n);
   }
-  function handleCreated(id: string, ref: string) {
+  function handleCreatedAndAdvance(id: string, ref: string) {
     setShipmentId(id);
     setShipmentRef(ref);
     goNext();
+  }
+  function handleCreatedAndExit(id: string) {
+    setShipmentId(id);
+    router.push(`/shipments/${id}/overview`);
   }
   function handleSaveAsDraft() {
     if (shipmentId) router.push(`/shipments/${shipmentId}/overview`);
@@ -84,8 +88,8 @@ export function CreateShipmentWizard(props: {
             countries={props.countries}
             profiles={props.profiles}
             canAdministerSuppliers={props.canAdministerSuppliers}
-            onCreated={handleCreated}
-            onSaveAsDraft={handleSaveAsDraft}
+            onCreatedAndAdvance={handleCreatedAndAdvance}
+            onCreatedAndExit={handleCreatedAndExit}
           />
         )}
         {step === 2 && shipmentId && (
