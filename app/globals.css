@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  /* FFC brand — deep emerald (produce/agriculture, not a generic Tailwind green),
+     paired with a warm harvest-gold accent used sparingly, and a green-tinted
+     ink instead of pure black/gray so the whole palette reads as one family. */
+  --color-primary: #0b6e4f;
+  --color-primary-dark: #084d38;
+  --color-primary-light: #e6f3ec;
+  --color-accent: #b8860b;
+  --color-accent-light: #fbf2df;
+
+  --color-ink: #14201a;
+  --color-ink-muted: #4b5a52;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f5f8f6;
+  --color-border: #dfe7e2;
+
+  --color-danger: #b3261e;
+  --color-danger-light: #fbeceb;
+  --color-warning: #9a6b00;
+  --color-warning-light: #fdf3dc;
+  --color-success: #0b6e4f;
+  --color-success-light: #e6f3ec;
+
+  --background: var(--color-surface-muted);
+  --foreground: var(--color-ink);
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-light: var(--color-primary-light);
+  --color-accent: var(--color-accent);
+  --color-accent-light: var(--color-accent-light);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-surface: var(--color-surface);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-border: var(--color-border);
+  --color-danger: var(--color-danger);
+  --color-danger-light: var(--color-danger-light);
+  --color-warning: var(--color-warning);
+  --color-warning-light: var(--color-warning-light);
+  --color-success: var(--color-success);
+  --color-success-light: var(--color-success-light);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Tabular figures for anything numeric in the register / detail screens —
+   AWB numbers, weights, invoice values should never visually jitter between rows. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+

@@ -1,0 +1,216 @@
+==========================================
+FFC Shipments — Modules 1.1 + 2 Verification Evidence
+Wed Jul 15 07:30:45 UTC 2026
+==========================================
+
+### npm ci ###
+added 418 packages, and audited 419 packages in 53s
+
+162 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+### npx tsc --noEmit ###
+(no output = clean)
+
+### npm run lint ###
+
+> ffc-app@0.1.0 lint
+> eslint
+
+
+### npm run test (Vitest) ###
+
+> ffc-app@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/home/claude/ffc-app[39m
+
+ [32m✓[39m lib/schemas/shipments.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m lib/dates.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m21 passed[39m[22m[90m (21)[39m
+[2m   Start at [22m 07:32:03
+[2m   Duration [22m 759ms[2m (transform 111ms, setup 0ms, import 215ms, tests 45ms, environment 0ms)[22m
+
+
+### npm run build ###
+
+> ffc-app@0.1.0 build
+> next build
+
+▲ Next.js 16.2.10 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 18.3s
+  Running TypeScript ...
+  Finished TypeScript in 13.4s ...
+  Collecting page data using 1 worker ...
+  Generating static pages using 1 worker (0/8) ...
+  Generating static pages using 1 worker (2/8) 
+  Generating static pages using 1 worker (4/8) 
+  Generating static pages using 1 worker (6/8) 
+✓ Generating static pages using 1 worker (8/8) in 420ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /access-denied
+├ ƒ /dashboard
+├ ○ /login
+├ ƒ /shipments
+├ ƒ /shipments/[id]
+├ ƒ /shipments/[id]/comments
+├ ƒ /shipments/[id]/customs
+├ ƒ /shipments/[id]/delivery-order
+├ ƒ /shipments/[id]/documents
+├ ƒ /shipments/[id]/invoices
+├ ƒ /shipments/[id]/mofaic
+├ ƒ /shipments/[id]/municipality
+├ ƒ /shipments/[id]/overview
+├ ƒ /shipments/[id]/physical-documents
+├ ƒ /shipments/[id]/transport
+└ ƒ /shipments/new
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+### npm audit --omit=dev ###
+found 0 vulnerabilities
+
+### Docker/Playwright environment disclosure (unchanged) ###
+No Docker in this sandbox; cdn.playwright.dev and registry-1.docker.io
+both blocked by network egress rules. supabase db start/reset and
+Playwright cannot run here — genuinely expected to work on a real
+machine or GitHub Actions (which has Docker).
+
+### Full clean-slate local Postgres + pgTAP rebuild ###
+migration 1 exit: 0
+migration 2 exit: 0
+migration 3 exit: 0
+seed exit: 0
+
+$ select * from storage.buckets;  (confirms the Module 2 bucket fix)
+         id         | public | file_size_limit 
+--------------------+--------+-----------------
+ shipment-documents | f      |        52428800
+(1 row)
+
+
+### pgTAP test suite (71 assertions) ###
+BEGIN
+ ok 1 - shipment_data_entry.export_reports must be false
+ ok 2 - documentation_user.export_reports must be false
+ ok 3 - customs_clearance_user.upload_docs must be true
+ ok 4 - customs_clearance_user.edit_mofaic must be true
+ ok 5 - customs_clearance_user.export_reports must be false
+ ok 6 - shipment_coordinator.verify_docs must be false
+ ok 7 - shipment_coordinator.edit_customs must be false
+ ok 8 - shipment_coordinator.edit_delivery_order must be false
+ ok 9 - finance_user.edit_invoice must be false
+ ok 10 - finance_user.upload_docs must be true
+ ok 11 - exactly 8 roles x 18 permissions = 144 rows seeded
+ ok 12 - direct UPDATE on shipments is rejected by grants, not just RLS
+ ok 13 - DXB shipment_data_entry cannot update_shipment_transport on an AUH shipment
+ ok 14 - DXB shipment_data_entry cannot add_comment on an AUH shipment
+ ok 15 - DXB customs_clearance_user cannot update_customs on an AUH shipment
+ ok 16 - DXB customs_clearance_user cannot raise_exception on an AUH shipment
+ ok 17 - DXB shipment_coordinator cannot assign_shipment on an AUH shipment
+ ok 18 - DXB shipment_coordinator CAN assign_shipment on a DXB (own-branch) shipment
+ ok 19 - shipment_supervisor (view_all_branches) CAN assign_shipment across branches
+ ok 20 - update_shipment_basic has exactly 8 parameters (no responsible/coordinator arguments remain)
+ ok 21 - no 10-argument overload of update_shipment_basic exists (the old responsible/coordinator signature is gone)
+ ok 22 - fn_is_shipment_completion_eligible() returns false live even though the cached column was forced to true
+ ok 23 - confirm_shipment_completion rejects despite cached completion_eligible=true (live recheck works)
+ ok 24 - no remaining open Critical/High exception after resolve_exception
+ ok 25 - raise_exception rejects an invalid severity value
+ ok 26 - first resubmission attempt is numbered 1
+ ok 27 - second resubmission attempt is numbered 2, not a duplicate 1
+ ok 28 - upload_document_metadata rejects when no Storage object exists at the path yet
+ ok 29 - upload_document_metadata still rejects with a valid intent but no Storage object yet
+ ok 30 - upload_document_metadata succeeds once a matching intent AND Storage object both exist
+ ok 31 - replace_document succeeds once a matching intent AND Storage object both exist
+ ok 32 - exactly one is_current version after replace_document
+ ok 33 - the new version correctly links replaces_version_id to the retired version
+ ok 34 - the v1 upload intent is marked fulfilled after use
+ ok 35 - upload_document_metadata rejects a storage path that does not match the shipment/document convention
+ ok 36 - authenticated user WITH upload_docs, correct branch, AND a matching registered intent CAN insert a storage.objects row
+ ok 37 - insert with NO matching registered upload intent is rejected even for the correct branch/permission
+ ok 38 - DXB customs_clearance_user CANNOT insert a storage.objects row under an AUH shipment path
+ ok 39 - management_read_only (no upload_docs permission) CANNOT insert into storage.objects at all
+ ok 40 - declaration number is required once customs_status reaches Declaration Created
+ ok 41 - declaration number is NOT required while customs_status is Not Started
+ ok 42 - negative package count is rejected
+ ok 43 - MOFAIC Paid status requires both a payment date and a payment amount
+ROLLBACK
+BEGIN
+ ok 1 - lifecycle: first resubmission attempt numbered 1
+ ok 2 - lifecycle: first attempt result set to Rejected
+ ok 3 - lifecycle: second resubmission attempt numbered 2
+ ok 4 - lifecycle: second attempt result set to Approved
+ ok 5 - lifecycle: exception resolved
+ ok 6 - lifecycle: exception closed
+ ok 7 - assign_shipment rejects assigning an INACTIVE profile as responsible
+ ok 8 - cross-branch assignee fixture check completed (seed has one branch of non-admin users by default)
+ ok 9 - a Draft/Customs-Processing shipment (never reached Received) is NOT eligible even if nothing else blocks it
+ ok 10 - raise_exception is rejected on a Completed shipment
+ ok 11 - add_comment IS allowed on a Completed shipment (explicit design decision)
+ ok 12 - an ordinary authenticated user (even a Supervisor) cannot call the scheduler-only notification function
+ ok 13 - an ordinary authenticated user cannot call an internal helper function directly
+ ok 14 - fn_lock_shipment_for_mutation exists as the single unified locking helper used by change_shipment_status, replace_document, etc.
+ROLLBACK
+BEGIN
+ ok 1 - an ordinary user CAN read their own full profile row
+ ok 2 - an ordinary user CANNOT read another user's full profile row (RLS silently filters, no error)
+ ok 3 - v_assignable_profiles exposes all active profiles' minimal fields regardless of who is asking
+ ok 4 - sanity: v_assignable_profiles query does not error for an ordinary user
+ ok 5 - system_administrator CAN read another user's full profile row
+ ok 6 - create_shipment uses the CANONICAL supplier name from master data, ignoring a mismatched client-supplied name
+ ok 7 - create_shipment rejects a supplier_id that does not exist
+ ok 8 - create_shipment rejects mode other than Air (Phase 1 restriction)
+ ok 9 - create_shipment rejects an invalid priority value
+ ok 10 - create_shipment accepts the Critical priority value
+ ok 11 - create_shipment rejects a blank (whitespace-only) supplier name
+ ok 12 - search_shipments returns results for the caller's own branch with no filters
+ ok 13 - search_shipments treats filter-syntax-like characters as a literal, harmless search string (no injection, no error)
+ ok 14 - search_shipments rejects an excessively long query string
+ROLLBACK
+
+### Module 2 functional smoke test — every new RPC, real seeded shipment ###
+(update_shipment_transport, add_invoice, update_customs, update_municipality,
+update_mofaic, update_physical_documents, add_comment, update_delivery_order)
+    awb     | packages 
+------------+----------
+ TESTAWB123 |      100
+--
+  invoice_no   | invoice_value 
+---------------+---------------
+ MOD2-TEST-001 |       5000.00
+--
+ declaration_no | customs_status 
+----------------+----------------
+ DECL-M2-001    | Approved
+--
+ municipality_status 
+---------------------
+ Draft
+--
+ mofaic_status | mofaic_payment_amount 
+---------------+-----------------------
+ Paid          |               3000.00
+--
+    physical_doc_status     | pod_received 
+----------------------------+--------------
+ Proof of Delivery Received | t
+--
+         ref         |    awb     | packages | declaration_no | customs_status | municipality_status | delivery_order_status | mofaic_status |    physical_doc_status     | completion_eligible 
+---------------------+------------+----------+----------------+----------------+---------------------+-----------------------+---------------+----------------------------+---------------------
+ FFC-AIR-2026-000001 | TESTAWB123 |      100 | DECL-M2-001    | Approved       | Draft               | Not Required          | Paid          | Proof of Delivery Received | f

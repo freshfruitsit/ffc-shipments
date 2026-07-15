@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint, type-check, unit tests, database, build, E2E, audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies (clean, reproducible)
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm run test
+
+      # GitHub Actions runners provide Docker by default — this step is not
+      # runnable in the sandbox this project was built in (no Docker there),
+      # but is genuinely executable here.
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase & apply migrations + seed
+        run: supabase db reset --local
+
+      - name: Fail if generated types are out of sync
+        run: |
+          npm run db:types
+          if ! git diff --exit-code lib/types/database.ts; then
+            echo "::error::lib/types/database.ts is out of sync with the local schema. Run 'npm run db:types' and commit the result."
+            exit 1
+          fi
+
+      - name: pgTAP database tests
+        run: supabase test db
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.CI_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.CI_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_USER_PASSWORD: ${{ secrets.CI_TEST_USER_PASSWORD }}
+          TEST_READONLY_PASSWORD: ${{ secrets.CI_TEST_READONLY_PASSWORD }}
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Production dependency audit (must be zero vulnerabilities)
+        run: npm audit --omit=dev
