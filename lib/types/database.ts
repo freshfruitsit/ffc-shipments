@@ -181,6 +181,58 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["shipment_comments"]["Row"]>;
         Relationships: [];
       };
+      notifications: {
+        Row: {
+          id: string; recipient: string; shipment_id: string | null; event_type: string;
+          title: string; message: string; priority: string; is_read: boolean;
+          created_at: string; read_at: string | null; link_target: string | null; dedup_key: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+        Relationships: [];
+      };
+      exceptions: {
+        Row: {
+          id: string; shipment_id: string; exception_type_id: string; severity: string; description: string;
+          status: string; raised_by: string | null; assigned_to: string | null; due_date: string | null;
+          root_cause: string | null; resolution: string | null; created_at: string; updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["exceptions"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["exceptions"]["Row"]>;
+        Relationships: [];
+      };
+      exception_types: {
+        Row: { id: string; name: string; is_active: boolean };
+        Insert: Partial<Database["public"]["Tables"]["exception_types"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["exception_types"]["Row"]>;
+        Relationships: [];
+      };
+      resubmission_attempts: {
+        Row: {
+          id: string; exception_id: string; attempt_no: number; submitted_by: string | null;
+          reason: string; corrective_action: string; authority_result: string;
+          completion_date: string | null; created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["resubmission_attempts"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["resubmission_attempts"]["Row"]>;
+        Relationships: [];
+      };
+      audit_log: {
+        Row: {
+          id: string; occurred_at: string; actor: string | null; actor_role: string | null;
+          action: string; module: string; shipment_ref: string | null; details: unknown;
+          comment: string | null; correlation_id: string | null; source: string; result: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["audit_log"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["audit_log"]["Row"]>;
+        Relationships: [];
+      };
+      status_transitions: {
+        Row: { from_status: OverallStatus; to_status: OverallStatus; required_permission: string; requires_reason: boolean };
+        Insert: Partial<Database["public"]["Tables"]["status_transitions"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["status_transitions"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       v_assignable_profiles: {
@@ -199,14 +251,16 @@ export interface Database {
       };
       has_permission: { Args: { p_permission: string }; Returns: boolean };
       search_shipments: {
-        Args: { p_query: string | null; p_status: OverallStatus | null; p_page: number; p_page_size: number };
+        Args: { p_query: string | null; p_status: OverallStatus | null; p_view: string | null; p_page: number; p_page_size: number };
         Returns: {
-          id: string; ref: string; supplier_name_snapshot: string; awb: string | null; eta: string | null;
-          shipment_date: string; overall_status: OverallStatus; customs_status: CustomsStatus;
-          municipality_status: MunicipalityStatus; delivery_order_status: DeliveryOrderStatus;
-          mofaic_status: MofaicStatus; total_count: number;
+          id: string; ref: string; supplier_name_snapshot: string; origin_country: string | null;
+          awb: string | null; eta: string | null; port: string | null;
+          shipment_date: string; overall_status: OverallStatus; document_status: DocumentStatus;
+          customs_status: CustomsStatus; municipality_status: MunicipalityStatus; delivery_order_status: DeliveryOrderStatus;
+          mofaic_status: MofaicStatus; physical_doc_status: PhysicalDocStatus; total_count: number;
         }[];
       };
+
       upsert_supplier: {
         Args: { p_id: string | null; p_code: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
         Returns: { id: string; code: string | null; name: string; is_active: boolean };
@@ -267,9 +321,32 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
+      assign_shipment: {
+        Args: { p_shipment_id: string; p_responsible: string | null; p_coordinator: string | null };
+        Returns: Database["public"]["Tables"]["shipments"]["Row"];
+      };
+      change_shipment_status: {
+        Args: { p_shipment_id: string; p_new_status: OverallStatus; p_reason?: string | null };
+        Returns: Database["public"]["Tables"]["shipments"]["Row"];
+      };
       add_comment: {
         Args: { p_shipment_id: string; p_body: string };
         Returns: Database["public"]["Tables"]["shipment_comments"]["Row"];
+      };
+      raise_exception: {
+        Args: {
+          p_shipment_id: string; p_exception_type_id: string; p_severity: string; p_description: string;
+          p_assigned_to: string | null; p_due_date?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["exceptions"]["Row"];
+      };
+      resolve_exception: {
+        Args: { p_exception_id: string; p_root_cause: string; p_resolution: string };
+        Returns: Database["public"]["Tables"]["exceptions"]["Row"];
+      };
+      close_exception: {
+        Args: { p_exception_id: string };
+        Returns: Database["public"]["Tables"]["exceptions"]["Row"];
       };
       fn_register_upload_intent: {
         Args: {

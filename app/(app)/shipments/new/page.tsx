@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { NewShipmentForm } from "@/components/shipments/new-shipment-form";
+import { getActiveBranches, getShipmentCategories, getCountries } from "@/lib/data/master-data";
 
 export default async function NewShipmentPage() {
   const supabase = await createClient();
@@ -30,16 +31,15 @@ export default async function NewShipmentPage() {
   // branch, pre-selected and effectively fixed — a user WITH it sees every
   // active branch and picks. Either way, fn_require_branch_access() inside
   // create_shipment is the real security boundary; this only shapes the UI.
-  const branchQuery = supabase.from("branches").select("id, name").eq("is_active", true).order("display_order");
-  const { data: branches } = canViewAllBranches
-    ? await branchQuery
-    : await branchQuery.eq("id", profile?.branch_id ?? "");
-
-  const [{ data: categories }, { data: countries }, { data: suppliers }] = await Promise.all([
-    supabase.from("shipment_categories").select("id, name").eq("is_active", true).order("display_order"),
-    supabase.from("countries").select("id, name").eq("is_active", true).order("name"),
+  // Branch list itself now comes from the shared cache — filtered in JS
+  // rather than re-querying, since the full list is already in hand.
+  const [allBranches, categories, countries, { data: suppliers }] = await Promise.all([
+    getActiveBranches(),
+    getShipmentCategories(),
+    getCountries(),
     supabase.from("suppliers").select("id, name").eq("is_active", true).order("name"),
   ]);
+  const branches = canViewAllBranches ? allBranches : allBranches.filter((b) => b.id === profile?.branch_id);
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -51,9 +51,9 @@ export default async function NewShipmentPage() {
       </div>
 
       <NewShipmentForm
-        branches={branches ?? []}
-        categories={categories ?? []}
-        countries={countries ?? []}
+        branches={branches}
+        categories={categories}
+        countries={countries}
         suppliers={suppliers ?? []}
         fixedBranchId={canViewAllBranches ? null : profile?.branch_id ?? null}
         canAdministerSuppliers={!!canAdminister}

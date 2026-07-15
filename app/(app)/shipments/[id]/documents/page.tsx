@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DocumentUploadForm } from "@/components/shipments/tabs/document-upload-form";
 import { DocumentDownloadLink } from "@/components/shipments/tabs/document-download-link";
 import { formatDubaiDateTime } from "@/lib/dates";
+import { getDocumentTypes } from "@/lib/data/master-data";
 
 export default async function DocumentsTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,9 +12,9 @@ export default async function DocumentsTab({ params }: { params: Promise<{ id: s
   const { data: shipment, error } = await supabase.from("shipments").select("overall_status").eq("id", id).single();
   if (error || !shipment) notFound();
 
-  const [{ data: documents }, { data: documentTypes }, { data: canUpload }] = await Promise.all([
+  const [{ data: documents }, documentTypes, { data: canUpload }] = await Promise.all([
     supabase.from("documents").select("*").eq("shipment_id", id),
-    supabase.from("document_types").select("id, name").eq("is_active", true).order("display_order"),
+    getDocumentTypes(),
     supabase.rpc("has_permission", { p_permission: "upload_docs" }),
   ]);
 

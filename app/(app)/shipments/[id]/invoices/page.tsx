@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InvoiceForm } from "@/components/shipments/tabs/invoice-form";
 import { formatDubaiDate } from "@/lib/dates";
+import { getCurrencies } from "@/lib/data/master-data";
 
 export default async function InvoicesTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,9 +11,9 @@ export default async function InvoicesTab({ params }: { params: Promise<{ id: st
   const { data: shipment, error } = await supabase.from("shipments").select("overall_status").eq("id", id).single();
   if (error || !shipment) notFound();
 
-  const [{ data: invoices }, { data: currencies }, { data: canEdit }] = await Promise.all([
+  const [{ data: invoices }, currencies, { data: canEdit }] = await Promise.all([
     supabase.from("invoices").select("*").eq("shipment_id", id).order("created_at", { ascending: false }),
-    supabase.from("currencies").select("code").eq("is_active", true).order("code"),
+    getCurrencies(),
     supabase.rpc("has_permission", { p_permission: "edit_invoice" }),
   ]);
 
@@ -52,7 +53,7 @@ export default async function InvoicesTab({ params }: { params: Promise<{ id: st
         </table>
       </div>
 
-      {canAdd && <InvoiceForm shipmentId={id} currencies={(currencies ?? []).map((c) => c.code)} />}
+      {canAdd && <InvoiceForm shipmentId={id} currencies={currencies} />}
       {!canAdd && (
         <p className="text-xs text-ink-muted">
           You don&apos;t have permission to add invoices, or this shipment is Completed.

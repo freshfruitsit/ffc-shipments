@@ -450,6 +450,7 @@ create table invoices (
 );
 create index idx_invoices_shipment on invoices(shipment_id);
 create index idx_invoices_invoice_no on invoices(invoice_no);
+create index idx_invoices_invoice_no_trgm on invoices using gin (invoice_no gin_trgm_ops);
 -- Duplicate-invoice detection ACROSS shipments is a reporting/exception concern,
 -- not a hard uniqueness constraint (the same invoice_no legitimately cannot repeat
 -- within one shipment, but a supplier's invoice numbering could theoretically repeat

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyRpcError } from "@/lib/actions/errors";
+import type { OverallStatus } from "@/lib/types/database";
 
 export type ActionState = { error?: string; success?: boolean; fieldErrors?: Record<string, string> };
 
@@ -93,6 +94,55 @@ export async function addInvoiceAction(_prev: ActionState, formData: FormData): 
     p_supplier_reference: d.supplier_reference || null,
     p_payment_terms: d.payment_terms || null,
     p_remarks: d.remarks || null,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${d.shipment_id}`);
+  return { success: true };
+}
+
+const AssignSchema = z.object({
+  shipment_id: z.string().uuid(),
+  responsible: z.string().uuid().optional().or(z.literal("")),
+  coordinator: z.string().uuid().optional().or(z.literal("")),
+});
+
+export async function assignShipmentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = AssignSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    return { error: "Invalid assignment." };
+  }
+  const supabase = await createClient();
+  const d = parsed.data;
+  const { error } = await supabase.rpc("assign_shipment", {
+    p_shipment_id: d.shipment_id,
+    p_responsible: d.responsible || null,
+    p_coordinator: d.coordinator || null,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${d.shipment_id}`);
+  return { success: true };
+}
+
+const ChangeStatusSchema = z.object({
+  shipment_id: z.string().uuid(),
+  new_status: z.string().min(1),
+  reason: z.string().trim().optional(),
+});
+
+export async function changeShipmentStatusAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = ChangeStatusSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    return { error: "Invalid status change." };
+  }
+  const supabase = await createClient();
+  const d = parsed.data;
+  const { error } = await supabase.rpc("change_shipment_status", {
+    p_shipment_id: d.shipment_id,
+    // change_shipment_status validates this against status_transitions
+    // server-side — an invalid/disallowed transition is rejected there
+    // regardless of what the client sends, so a plain cast here is safe.
+    p_new_status: d.new_status as OverallStatus,
+    p_reason: d.reason || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
   revalidatePath(`/shipments/${d.shipment_id}`);

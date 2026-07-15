@@ -50,11 +50,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     branchName = branch?.name ?? null;
   }
 
+  const { count: unreadCount } = await supabase
+    .from("notifications")
+    .select("*", { count: "exact", head: true })
+    .eq("is_read", false);
+
   return (
     <div className="flex h-screen overflow-hidden bg-surface-muted">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar fullName={profile.full_name} role={profile.role} branchName={branchName} />
+        <Topbar
+          fullName={profile.full_name}
+          role={profile.role}
+          branchName={branchName}
+          unreadNotificationCount={unreadCount ?? 0}
+        />
         <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
     </div>

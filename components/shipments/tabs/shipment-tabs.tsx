@@ -2,19 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const TABS = [
-  { segment: "overview", label: "Overview" },
-  { segment: "transport", label: "Transport" },
-  { segment: "invoices", label: "Invoices" },
-  { segment: "documents", label: "Documents" },
-  { segment: "customs", label: "Dubai Customs" },
-  { segment: "municipality", label: "Dubai Municipality" },
-  { segment: "delivery-order", label: "Delivery Order" },
-  { segment: "mofaic", label: "MOFAIC" },
-  { segment: "physical-documents", label: "Physical Documents" },
-  { segment: "comments", label: "Comments" },
-];
+import { DETAIL_TABS } from "@/lib/prototype-constants";
 
 export function ShipmentTabs({ shipmentId }: { shipmentId: string }) {
   const pathname = usePathname();
@@ -22,14 +10,14 @@ export function ShipmentTabs({ shipmentId }: { shipmentId: string }) {
   return (
     <div className="overflow-x-auto border-b border-border">
       <nav className="flex min-w-max gap-1 px-1">
-        {TABS.map((tab) => {
+        {DETAIL_TABS.map((tab) => {
           const href = `/shipments/${shipmentId}/${tab.segment}`;
           const active = pathname === href;
           return (
             <Link
               key={tab.segment}
               href={href}
-              className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+              className={`whitespace-nowrap border-b-2 px-3.5 py-2.5 text-[12.5px] font-semibold transition ${
                 active
                   ? "border-primary text-primary-dark"
                   : "border-transparent text-ink-muted hover:border-border hover:text-ink"

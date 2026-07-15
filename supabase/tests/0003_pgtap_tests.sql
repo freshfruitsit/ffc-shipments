@@ -550,7 +550,7 @@ rollback;
 -- 6 (parameterized search).
 -- ============================================================
 begin;
-select plan(14);
+select plan(17);
 
 create temp table t_fixture3 as
 select
@@ -669,16 +669,36 @@ set role authenticated;
 select set_config('app.current_user_id', (select dxb_data_entry::text from t_fixture3), false);
 select set_config('app.current_role_claim', 'authenticated', false);
 select ok(
-  (select count(*)::int from search_shipments(null, null, 1, 25)) >= 1,
+  (select count(*)::int from search_shipments(p_query := null, p_status := null, p_page := 1, p_page_size := 25)) >= 1,
   'search_shipments returns results for the caller''s own branch with no filters'
 );
 select lives_ok(
-  $$ select * from search_shipments('%,,,)) OR 1=1 --', null, 1, 25) $$,
+  $$ select * from search_shipments(p_query := '%,,,)) OR 1=1 --', p_status := null, p_page := 1, p_page_size := 25) $$,
   'search_shipments treats filter-syntax-like characters as a literal, harmless search string (no injection, no error)'
 );
 select throws_ok(
-  format($$ select * from search_shipments(%L, null, 1, 25) $$, repeat('x', 200)),
+  format($$ select * from search_shipments(p_query := %L, p_status := null, p_page := 1, p_page_size := 25) $$, repeat('x', 200)),
   '23514', null, 'search_shipments rejects an excessively long query string'
+);
+reset role;
+
+-- ============================================================
+-- Saved-view quick filters (prototype parity pass)
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_data_entry::text from t_fixture3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select count(*)::int from search_shipments(p_query := null, p_status := null, p_view := 'mine', p_page := 1, p_page_size := 25)) >= 1,
+  'the "mine" saved view returns at least the shipment already assigned to this user (from create_shipment above)'
+);
+select is(
+  (select count(*)::int from search_shipments(p_query := null, p_status := null, p_view := 'resub', p_page := 1, p_page_size := 25)),
+  0, 'the "resub" saved view returns zero rows when no shipment is in Resubmission Required'
+);
+select lives_ok(
+  $$ select * from search_shipments(p_query := null, p_status := null, p_view := 'not_a_real_view', p_page := 1, p_page_size := 25) $$,
+  'an unrecognized view key falls through to the ELSE true branch rather than erroring'
 );
 reset role;
 

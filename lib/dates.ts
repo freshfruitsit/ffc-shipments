@@ -18,29 +18,37 @@ export function dubaiTodayISODate(): string {
   }).format(new Date());
 }
 
-/** Format an ISO timestamp/date as a Dubai-local date, e.g. "15 Jul 2026". */
+/** Format an ISO timestamp/date as DD-MM-YYYY (exact prototype convention, data.js fmtDate). */
 export function formatDubaiDate(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: DUBAI_TZ,
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
-  }).format(new Date(value));
+  }).formatToParts(new Date(value));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")}-${get("month")}-${get("year")}`;
 }
 
-/** Format an ISO timestamp as Dubai-local date + time, e.g. "15 Jul 2026, 14:30". */
+/** Format an ISO timestamp as DD-MM-YYYY HH:mm (exact prototype convention, data.js fmtDateTime). */
 export function formatDubaiDateTime(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  const datePart = formatDubaiDate(value);
+  const timeParts = new Intl.DateTimeFormat("en-GB", {
     timeZone: DUBAI_TZ,
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date(value));
+  }).formatToParts(new Date(value));
+  const get = (t: string) => timeParts.find((p) => p.type === t)?.value ?? "";
+  return `${datePart} ${get("hour")}:${get("minute")}`;
+}
+
+/** Format a currency amount matching the prototype's fmtMoney: "{CUR} {value, 2dp}". */
+export function formatMoney(value: number | null | undefined, currency: string | null | undefined): string {
+  if (value == null) return "—";
+  return `${currency ?? ""} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
 /**

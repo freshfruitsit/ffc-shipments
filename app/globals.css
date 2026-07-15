@@ -1,27 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  /* FFC brand — deep emerald (produce/agriculture, not a generic Tailwind green),
-     paired with a warm harvest-gold accent used sparingly, and a green-tinted
-     ink instead of pure black/gray so the whole palette reads as one family. */
-  --color-primary: #0b6e4f;
-  --color-primary-dark: #084d38;
-  --color-primary-light: #e6f3ec;
-  --color-accent: #b8860b;
-  --color-accent-light: #fbf2df;
+  /* Exact tokens from the finalized prototype (head.html) — matching,
+     not approximating. */
+  --color-primary: #08783e;
+  --color-primary-dark: #07552f;
+  --color-primary-light: #eaf5ef;
+  --color-accent: #d97706;
+  --color-accent-light: #fef0dc;
 
-  --color-ink: #14201a;
-  --color-ink-muted: #4b5a52;
+  --color-ink: #1d2924;
+  --color-ink-muted: #66736d;
   --color-surface: #ffffff;
-  --color-surface-muted: #f5f8f6;
-  --color-border: #dfe7e2;
+  --color-surface-muted: #f5f7f6;
+  --color-border: #dde5e1;
 
-  --color-danger: #b3261e;
-  --color-danger-light: #fbeceb;
-  --color-warning: #9a6b00;
-  --color-warning-light: #fdf3dc;
-  --color-success: #0b6e4f;
-  --color-success-light: #e6f3ec;
+  --color-danger: #c93636;
+  --color-danger-light: #fce8e8;
+  --color-warning: #d97706;
+  --color-warning-light: #fef0dc;
+  --color-info: #2563eb;
+  --color-info-light: #e7eefb;
+  --color-success: #08783e;
+  --color-success-light: #eaf5ef;
 
   --background: var(--color-surface-muted);
   --foreground: var(--color-ink);
@@ -42,6 +43,8 @@
   --color-danger-light: var(--color-danger-light);
   --color-warning: var(--color-warning);
   --color-warning-light: var(--color-warning-light);
+  --color-info: var(--color-info);
+  --color-info-light: var(--color-info-light);
   --color-success: var(--color-success);
   --color-success-light: var(--color-success-light);
   --color-background: var(--background);
@@ -55,8 +58,6 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* Tabular figures for anything numeric in the register / detail screens —
-   AWB numbers, weights, invoice values should never visually jitter between rows. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }

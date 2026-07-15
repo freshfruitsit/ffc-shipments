@@ -2677,23 +2677,35 @@ grant execute on function fn_generate_time_based_notifications() to service_role
 -- into an executed SQL string — so there is no injection surface here at
 -- all, not just a mitigated one.
 -- ============================================================
+-- The old 4-parameter overload is superseded by the 5-parameter version
+-- below (added p_view) — dropped explicitly because changing a function's
+-- parameter list creates a NEW overload in Postgres rather than replacing
+-- the old one; leaving both around would be confusing and the old one
+-- doesn't support saved views at all.
+drop function if exists search_shipments(text, public.overall_status, int, int);
+
 create or replace function search_shipments(
   p_query text default null,
   p_status public.overall_status default null,
+  p_view text default null,
   p_page int default 1,
   p_page_size int default 25
 ) returns table (
   id uuid,
   ref text,
   supplier_name_snapshot text,
+  origin_country text,
   awb text,
   eta timestamptz,
+  port text,
   shipment_date date,
   overall_status public.overall_status,
+  document_status public.document_status,
   customs_status public.customs_status,
   municipality_status public.municipality_status,
   delivery_order_status public.delivery_order_status,
   mofaic_status public.mofaic_status,
+  physical_doc_status public.physical_doc_status,
   total_count bigint
 )
 language plpgsql
@@ -2707,6 +2719,7 @@ declare
   v_page_size int;
   v_offset int;
   v_query text;
+  v_view text;
 begin
   v_profile := public.fn_current_profile();
 
@@ -2718,16 +2731,20 @@ begin
   v_page_size := least(greatest(coalesce(p_page_size, 25), 1), 100);
   v_offset := (v_page - 1) * v_page_size;
   v_query := nullif(trim(coalesce(p_query, '')), '');
+  v_view := coalesce(nullif(trim(p_view), ''), 'all');
 
   select allowed into v_view_all from public.role_permissions
     where role = v_profile.role and permission = 'view_all_branches';
 
   return query
   select
-    s.id, s.ref, s.supplier_name_snapshot, s.awb, s.eta, s.shipment_date,
-    s.overall_status, s.customs_status, s.municipality_status, s.delivery_order_status, s.mofaic_status,
+    s.id, s.ref, s.supplier_name_snapshot, co.name as origin_country, s.awb, s.eta, po.name as port,
+    s.shipment_date, s.overall_status, s.document_status, s.customs_status, s.municipality_status,
+    s.delivery_order_status, s.mofaic_status, s.physical_doc_status,
     count(*) over ()::bigint as total_count
   from public.shipments s
+  left join public.countries co on co.id = s.origin_country_id
+  left join public.ports po on po.id = s.port_id
   where (coalesce(v_view_all, false) or s.branch_id = v_profile.branch_id)
     and (p_status is null or s.overall_status = p_status)
     and (
@@ -2735,10 +2752,41 @@ begin
       or s.ref ilike '%' || v_query || '%'
       or s.awb ilike '%' || v_query || '%'
       or s.supplier_name_snapshot ilike '%' || v_query || '%'
+      or exists (
+        select 1 from public.invoices i where i.shipment_id = s.id and i.invoice_no ilike '%' || v_query || '%'
+      )
+    )
+    -- Item: the 13 saved-view quick filters, exact port of the prototype's
+    -- SAVED_VIEWS predicate functions (app.js). Each is a real server-side
+    -- filter, not client-side post-filtering, so pagination/counts stay
+    -- correct regardless of which view is active.
+    and (
+      case v_view
+        when 'all' then s.overall_status <> 'Cancelled'
+        when 'mine' then s.responsible = v_profile.id
+        when 'today' then s.eta is not null and (s.eta at time zone 'Asia/Dubai')::date = (now() at time zone 'Asia/Dubai')::date
+        when 'week' then s.eta is not null
+          and (s.eta at time zone 'Asia/Dubai')::date >= (now() at time zone 'Asia/Dubai')::date
+          and (s.eta at time zone 'Asia/Dubai')::date <= (now() at time zone 'Asia/Dubai')::date + 7
+        when 'missingdocs' then s.document_status not in ('Verified','Complete')
+        when 'custpending' then s.customs_status not in ('Approved','Closed') and s.overall_status not in ('Draft','Cancelled')
+        when 'munipending' then s.municipality_status not in ('Not Required','Finished') and s.overall_status not in ('Draft','Cancelled')
+        when 'dopending' then s.delivery_order_status in ('Pending','Requested')
+        when 'mofaicpending' then s.mofaic_status in ('Pending','Payment Due','Overdue')
+        when 'physpending' then s.physical_doc_status in ('Originals Pending','Ready for Dispatch')
+        when 'exceptions' then exists (
+          select 1 from public.exceptions e where e.shipment_id = s.id and e.status not in ('Resolved','Closed')
+        )
+        when 'resub' then s.overall_status = 'Resubmission Required'
+        when 'collection' then s.overall_status = 'Ready for Collection'
+        when 'completed' then s.overall_status = 'Completed'
+          and date_trunc('month', s.updated_at at time zone 'Asia/Dubai') = date_trunc('month', now() at time zone 'Asia/Dubai')
+        else true
+      end
     )
   order by s.created_at desc
   limit v_page_size offset v_offset;
 end;
 $$;
-revoke all on function search_shipments(text, public.overall_status, int, int) from public;
-grant execute on function search_shipments(text, public.overall_status, int, int) to authenticated;
+revoke all on function search_shipments(text, public.overall_status, text, int, int) from public;
+grant execute on function search_shipments(text, public.overall_status, text, int, int) to authenticated;
