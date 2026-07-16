@@ -68,29 +68,28 @@ export default async function ShipmentsPage({
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm" style={{ minWidth: "1400px", width: "100%" }}>
             <thead>
               <tr className="border-b border-border bg-surface-muted text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                <th className="px-4 py-2.5">Shipment ID</th>
-                <th className="px-4 py-2.5">Shipment Date</th>
-                <th className="px-4 py-2.5">Overall Status</th>
-                <th className="px-4 py-2.5">Supplier</th>
-                <th className="px-4 py-2.5">Origin Country</th>
-                <th className="px-4 py-2.5">AWB</th>
-                <th className="px-4 py-2.5">ETA</th>
-                <th className="px-4 py-2.5">Arrival Port</th>
-                <th className="px-4 py-2.5">Document Status</th>
-                <th className="px-4 py-2.5">Customs Status</th>
-                <th className="px-4 py-2.5">Municipality Status</th>
-                <th className="px-4 py-2.5">Delivery Order Status</th>
-                <th className="px-4 py-2.5">MOFAIC Status</th>
-                <th className="px-4 py-2.5">Physical Document Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Shipment ID</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Shipment Date</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Overall Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Supplier</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Origin Country</th>
+                <th className="whitespace-nowrap px-4 py-2.5">ETA</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Arrival Port</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Document Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Customs Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Municipality Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Delivery Order Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">MOFAIC Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Physical Document Status</th>
               </tr>
             </thead>
             <tbody>
               {error && (
                 <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center text-sm text-danger">
+                  <td colSpan={13} className="px-4 py-8 text-center text-sm text-danger">
                     Couldn&apos;t load the shipment register right now. Try refreshing — if this keeps
                     happening, contact FFC IT.
                   </td>
@@ -98,43 +97,42 @@ export default async function ShipmentsPage({
               )}
               {!error && results?.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="px-4 py-10 text-center text-sm text-ink-muted">
+                  <td colSpan={13} className="px-4 py-10 text-center text-sm text-ink-muted">
                     No shipments match this view yet.
                   </td>
                 </tr>
               )}
               {results?.map((s) => (
                 <tr key={s.id} className="border-b border-border last:border-0 hover:bg-primary-light/40">
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <Link href={`/shipments/${s.id}/overview`} className="font-medium text-primary-dark hover:underline">
                       {s.ref}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 tabular-nums text-ink-muted">{formatDubaiDate(s.shipment_date)}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-ink-muted">{formatDubaiDate(s.shipment_date)}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.overall_status} />
                   </td>
-                  <td className="px-4 py-2.5 text-ink">{s.supplier_name_snapshot}</td>
-                  <td className="px-4 py-2.5 text-ink-muted">{s.origin_country ?? "—"}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-ink-muted">{s.awb ?? "—"}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-ink-muted">{s.eta ? formatDubaiDate(s.eta) : "—"}</td>
-                  <td className="px-4 py-2.5 text-ink-muted">{s.port ?? "—"}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-ink">{s.supplier_name_snapshot}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">{s.origin_country ?? "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-ink-muted">{s.eta ? formatDubaiDate(s.eta) : "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">{s.port ?? "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.document_status} criticalList={[...STATUS_SEVERITY.document.critical]} warnList={[...STATUS_SEVERITY.document.warn]} />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.customs_status} criticalList={[...STATUS_SEVERITY.customs.critical]} warnList={[...STATUS_SEVERITY.customs.warn]} />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.municipality_status} criticalList={[...STATUS_SEVERITY.municipality.critical]} warnList={[...STATUS_SEVERITY.municipality.warn]} />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.delivery_order_status} criticalList={[...STATUS_SEVERITY.deliveryOrder.critical]} warnList={[...STATUS_SEVERITY.deliveryOrder.warn]} />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.mofaic_status} criticalList={[...STATUS_SEVERITY.mofaic.critical]} warnList={[...STATUS_SEVERITY.mofaic.warn]} />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.physical_doc_status} criticalList={[...STATUS_SEVERITY.physicalDoc.critical]} warnList={[...STATUS_SEVERITY.physicalDoc.warn]} />
                   </td>
                 </tr>
