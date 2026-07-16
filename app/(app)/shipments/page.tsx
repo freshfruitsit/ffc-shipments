@@ -68,7 +68,7 @@ export default async function ShipmentsPage({
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <div className="overflow-x-auto">
-          <table className="text-sm" style={{ minWidth: "1400px", width: "100%" }}>
+          <table className="text-sm" style={{ minWidth: "1300px", width: "100%" }}>
             <thead>
               <tr className="border-b border-border bg-surface-muted text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
                 <th className="whitespace-nowrap px-4 py-2.5">Shipment ID</th>
@@ -78,7 +78,6 @@ export default async function ShipmentsPage({
                 <th className="whitespace-nowrap px-4 py-2.5">Origin Country</th>
                 <th className="whitespace-nowrap px-4 py-2.5">ETA</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Arrival Port</th>
-                <th className="whitespace-nowrap px-4 py-2.5">Document Status</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Customs Status</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Municipality Status</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Delivery Order Status</th>
@@ -89,7 +88,7 @@ export default async function ShipmentsPage({
             <tbody>
               {error && (
                 <tr>
-                  <td colSpan={13} className="px-4 py-8 text-center text-sm text-danger">
+                  <td colSpan={12} className="px-4 py-8 text-center text-sm text-danger">
                     Couldn&apos;t load the shipment register right now. Try refreshing — if this keeps
                     happening, contact FFC IT.
                   </td>
@@ -97,7 +96,7 @@ export default async function ShipmentsPage({
               )}
               {!error && results?.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-4 py-10 text-center text-sm text-ink-muted">
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-ink-muted">
                     No shipments match this view yet.
                   </td>
                 </tr>
@@ -117,9 +116,6 @@ export default async function ShipmentsPage({
                   <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">{s.origin_country ?? "—"}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-ink-muted">{s.eta ? formatDubaiDate(s.eta) : "—"}</td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">{s.port ?? "—"}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5">
-                    <StatusBadge status={s.document_status} criticalList={[...STATUS_SEVERITY.document.critical]} warnList={[...STATUS_SEVERITY.document.warn]} />
-                  </td>
                   <td className="whitespace-nowrap px-4 py-2.5">
                     <StatusBadge status={s.customs_status} criticalList={[...STATUS_SEVERITY.customs.critical]} warnList={[...STATUS_SEVERITY.customs.warn]} />
                   </td>

@@ -71,7 +71,7 @@ export function MunicipalityUpdateModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Submission Date">
+              <Field label="Draft Submission Date">
                 <input type="date" name="municipality_submission_date" defaultValue={shipment.municipality_submission_date ?? ""} className={inputClass} />
               </Field>
             </div>

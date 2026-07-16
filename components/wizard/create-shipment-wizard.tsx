@@ -38,6 +38,7 @@ export function CreateShipmentWizard(props: {
   documentTypes: Option[];
   currencies: string[];
   profiles: Option[];
+  suppliers: Option[];
   deliveryOrderProfiles: Option[];
   mofaicProfiles: Option[];
   physicalDocsProfiles: Option[];
@@ -87,6 +88,7 @@ export function CreateShipmentWizard(props: {
             categories={props.categories}
             countries={props.countries}
             profiles={props.profiles}
+            suppliers={props.suppliers}
             canAdministerSuppliers={props.canAdministerSuppliers}
             onCreatedAndAdvance={handleCreatedAndAdvance}
             onCreatedAndExit={handleCreatedAndExit}

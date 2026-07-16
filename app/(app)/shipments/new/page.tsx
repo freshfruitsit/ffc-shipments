@@ -17,6 +17,7 @@ type FormContext = {
   courier_companies: { id: string; name: string }[];
   document_types: { id: string; name: string }[];
   currencies: string[];
+  suppliers: { id: string; name: string }[];
 };
 
 export default async function NewShipmentPage() {
@@ -69,6 +70,7 @@ export default async function NewShipmentPage() {
         couriers={ctx.courier_companies}
         documentTypes={ctx.document_types}
         currencies={ctx.currencies}
+        suppliers={ctx.suppliers}
         profiles={(allProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
         deliveryOrderProfiles={(deliveryOrderProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
         mofaicProfiles={(mofaicProfiles ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
