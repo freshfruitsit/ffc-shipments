@@ -738,7 +738,7 @@ select ok(
 );
 
 select ok(
-  (select (get_dashboard_metrics()->>'total_active')::int >= 1),
+  (select (get_dashboard_metrics()->'kpis'->>'active_shipments')::int >= 1),
   'get_dashboard_metrics counts at least the shipment just created'
 );
 
@@ -1150,6 +1150,93 @@ select is(
   (select count(*)::int from shipments where import_batch_id = (select batch_id from t_batch)),
   1, 'exactly one shipment was actually created from the one valid row'
 );
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- DASHBOARD REBUILD — get_dashboard_metrics' new fields
+-- ============================================================
+begin;
+select plan(7);
+
+create temp table t_fixture_dash as
+select
+  (select id from profiles where role = 'shipment_supervisor' limit 1) as supervisor_id,
+  (select id from profiles where role = 'shipment_data_entry' limit 1) as dxb_user,
+  (select s.id from shipments s join branches b on b.id = s.branch_id where b.code = 'DXB-AIR' limit 1) as dxb_shipment,
+  (select s.id from shipments s join branches b on b.id = s.branch_id where b.code = 'AUH' limit 1) as auh_shipment;
+grant select on t_fixture_dash to authenticated;
+
+-- Force one DXB shipment to have a rejected customs status and a
+-- passed ETA, so attention_required and the KPI counters have real,
+-- deterministic rows to find rather than relying on whatever the seed
+-- happens to contain.
+update shipments set customs_status = 'Rejected', overall_status = 'Customs Processing' where id = (select dxb_shipment from t_fixture_dash);
+update shipments set eta = now() - interval '2 days', overall_status = 'Customs Processing' where id = (select auh_shipment from t_fixture_dash);
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_user::text from t_fixture_dash), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+
+select ok(
+  (select jsonb_typeof(get_dashboard_metrics()->'monthly_volume') = 'array'),
+  'monthly_volume is a JSON array'
+);
+select is(
+  (select jsonb_array_length(get_dashboard_metrics()->'monthly_volume')),
+  6, 'monthly_volume always returns exactly 6 months (including zero-count months), not just months with data'
+);
+select ok(
+  (select count(*)::int from shipments s where s.branch_id = (select branch_id from profiles where id = (select dxb_user from t_fixture_dash)))
+    = (select sum((elem->>'count')::int) from jsonb_array_elements(get_dashboard_metrics()->'status_distribution') elem),
+  'status_distribution counts sum to exactly the caller''s own branch total (branch scoping honored)'
+);
+select ok(
+  (select exists (
+    select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
+    where elem->>'text' = 'Dubai Customs rejected the declaration' and elem->>'ref' = (select ref from shipments where id = (select dxb_shipment from t_fixture_dash))
+  )),
+  'attention_required includes the Dubai Customs rejection alert for the shipment just forced into that state'
+);
+select ok(
+  (select not exists (
+    select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
+    where elem->>'ref' = (select ref from shipments where id = (select auh_shipment from t_fixture_dash))
+  )),
+  'attention_required does NOT include an AUH-branch shipment for a DXB-only user (branch scoping honored on the alerts list too)'
+);
+reset role;
+
+-- A view_all_branches user (supervisor) should see attention items from
+-- BOTH branches, including the AUH one just forced into an ETA-passed
+-- state.
+set role authenticated;
+select set_config('app.current_user_id', (select supervisor_id::text from t_fixture_dash), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select exists (
+    select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
+    where elem->>'text' = 'ETA passed but shipment not received' and elem->>'ref' = (select ref from shipments where id = (select auh_shipment from t_fixture_dash))
+  )),
+  'a view_all_branches user sees the ETA-passed alert for a shipment in a DIFFERENT branch'
+);
+select ok(
+  (select bool_and(
+    case p1 when 'Critical' then 0 when 'High' then 1 when 'Medium' then 2 else 3 end
+    <= case p2 when 'Critical' then 0 when 'High' then 1 when 'Medium' then 2 else 3 end
+  ) from (
+    select
+      elem->>'priority' as p1,
+      lead(elem->>'priority') over (order by ord) as p2
+    from (
+      select elem, row_number() over () as ord
+      from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
+    ) x
+  ) pairs where p2 is not null),
+  'attention_required is actually sorted by priority (Critical before High before Medium before Low), not just capped at 12 in arbitrary order'
+);
+reset role;
 
 select * from finish();
 rollback;
