@@ -49,7 +49,7 @@ export default async function NewShipmentPage() {
     ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-1">
+    <div className="space-y-1">
       <div>
         <h1 className="text-xl font-semibold text-ink">Create Shipment</h1>
         <p className="text-sm text-ink-muted">Structured shipment intake wizard</p>

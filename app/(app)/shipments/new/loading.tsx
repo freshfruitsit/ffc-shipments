@@ -1,6 +1,6 @@
 export default function NewShipmentLoading() {
   return (
-    <div className="mx-auto max-w-5xl animate-pulse space-y-3">
+    <div className="animate-pulse space-y-3">
       <div>
         <div className="h-5 w-40 rounded bg-surface-muted" />
         <div className="mt-2 h-3.5 w-56 rounded bg-surface-muted" />
