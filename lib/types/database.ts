@@ -96,7 +96,12 @@ export type PhysicalDocStatus =
 
 export type DocVersionStatus = "Uploaded" | "Verified" | "Rejected" | "Archived";
 
-type MasterRow = { id: string; name: string; is_active: boolean; display_order?: number };
+export type DiscoveryStatus =
+  | "Not Discussed" | "Under Review" | "Pending Confirmation" | "Approved" | "Rejected" | "Deferred";
+
+export type ImportBatchStatus = "Uploaded" | "Parsing" | "Validated" | "Committing" | "Committed" | "Failed";
+
+type MasterRow = { id: string; name: string; is_active: boolean; display_order: number };
 
 export interface Database {
   public: {
@@ -111,11 +116,11 @@ export interface Database {
         Relationships: [];
       };
       branches: { Row: MasterRow & { code: string }; Insert: Partial<MasterRow & { code: string }>; Update: Partial<MasterRow & { code: string }>; Relationships: [] };
-      suppliers: { Row: { id: string; code: string | null; name: string; is_active: boolean }; Insert: Partial<Database["public"]["Tables"]["suppliers"]["Row"]>; Update: Partial<Database["public"]["Tables"]["suppliers"]["Row"]>; Relationships: [] };
-      countries: { Row: { id: string; iso_code: string | null; name: string; is_active: boolean }; Insert: Partial<Database["public"]["Tables"]["countries"]["Row"]>; Update: Partial<Database["public"]["Tables"]["countries"]["Row"]>; Relationships: [] };
+      suppliers: { Row: { id: string; code: string | null; name: string; is_active: boolean; display_order: number }; Insert: Partial<Database["public"]["Tables"]["suppliers"]["Row"]>; Update: Partial<Database["public"]["Tables"]["suppliers"]["Row"]>; Relationships: [] };
+      countries: { Row: { id: string; iso_code: string | null; name: string; is_active: boolean; display_order: number }; Insert: Partial<Database["public"]["Tables"]["countries"]["Row"]>; Update: Partial<Database["public"]["Tables"]["countries"]["Row"]>; Relationships: [] };
       shipment_categories: { Row: MasterRow; Insert: Partial<MasterRow>; Update: Partial<MasterRow>; Relationships: [] };
-      airlines: { Row: { id: string; code: string | null; name: string; is_active: boolean }; Insert: Partial<Database["public"]["Tables"]["airlines"]["Row"]>; Update: Partial<Database["public"]["Tables"]["airlines"]["Row"]>; Relationships: [] };
-      ports: { Row: { id: string; code: string; name: string; is_active: boolean }; Insert: Partial<Database["public"]["Tables"]["ports"]["Row"]>; Update: Partial<Database["public"]["Tables"]["ports"]["Row"]>; Relationships: [] };
+      airlines: { Row: { id: string; code: string | null; name: string; is_active: boolean; display_order: number }; Insert: Partial<Database["public"]["Tables"]["airlines"]["Row"]>; Update: Partial<Database["public"]["Tables"]["airlines"]["Row"]>; Relationships: [] };
+      ports: { Row: { id: string; code: string; name: string; is_active: boolean; display_order: number }; Insert: Partial<Database["public"]["Tables"]["ports"]["Row"]>; Update: Partial<Database["public"]["Tables"]["ports"]["Row"]>; Relationships: [] };
       freight_agents: { Row: MasterRow; Insert: Partial<MasterRow>; Update: Partial<MasterRow>; Relationships: [] };
       clearing_agents: { Row: MasterRow; Insert: Partial<MasterRow>; Update: Partial<MasterRow>; Relationships: [] };
       carriers: { Row: MasterRow; Insert: Partial<MasterRow>; Update: Partial<MasterRow>; Relationships: [] };
@@ -204,7 +209,7 @@ export interface Database {
         Relationships: [];
       };
       exception_types: {
-        Row: { id: string; name: string; is_active: boolean };
+        Row: { id: string; name: string; is_active: boolean; display_order: number };
         Insert: Partial<Database["public"]["Tables"]["exception_types"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["exception_types"]["Row"]>;
         Relationships: [];
@@ -219,10 +224,33 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["resubmission_attempts"]["Row"]>;
         Relationships: [];
       };
+      discovery_items: {
+        Row: {
+          id: string; code: string; topic: string; description: string; proposed_rule: string;
+          owner: string | null; due_date: string | null; status: DiscoveryStatus; notes: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["discovery_items"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["discovery_items"]["Row"]>;
+        Relationships: [];
+      };
+      import_batches: {
+        Row: {
+          id: string; file_name: string; file_sha256: string; uploaded_by: string | null; uploaded_at: string;
+          status: ImportBatchStatus; chunk_size: number; total_rows: number | null; valid_rows: number | null;
+          warning_rows: number | null; invalid_rows: number | null; last_processed_row: number;
+          reconciliation_passed: boolean | null; committed_at: string | null; committed_by: string | null;
+          failure_reason: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["import_batches"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["import_batches"]["Row"]>;
+        Relationships: [];
+      };
       audit_log: {
         Row: {
           id: string; occurred_at: string; actor: string | null; actor_role: string | null;
-          action: string; module: string; shipment_ref: string | null; details: unknown;
+          action: string; module: string; shipment_ref: string | null; related: string | null;
+          old_value: string | null; new_value: string | null; details: unknown;
           comment: string | null; correlation_id: string | null; source: string; result: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["audit_log"]["Row"]>;
@@ -230,7 +258,7 @@ export interface Database {
         Relationships: [];
       };
       fx_rates: {
-        Row: { id: string; currency_code: string; effective_date: string; rate_to_aed: number };
+        Row: { id: string; currency_code: string; effective_date: string; rate_to_aed: number; source: string; created_at: string };
         Insert: Partial<Database["public"]["Tables"]["fx_rates"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["fx_rates"]["Row"]>;
         Relationships: [];
@@ -245,6 +273,12 @@ export interface Database {
         Row: { role: AppRole; permission: string; allowed: boolean };
         Insert: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
+        Relationships: [];
+      };
+      permissions: {
+        Row: { code: string; description: string };
+        Insert: Partial<Database["public"]["Tables"]["permissions"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["permissions"]["Row"]>;
         Relationships: [];
       };
       status_transitions: {
@@ -302,6 +336,32 @@ export interface Database {
           shipment_date: string; overall_status: OverallStatus; document_status: DocumentStatus;
           customs_status: CustomsStatus; municipality_status: MunicipalityStatus; delivery_order_status: DeliveryOrderStatus;
           mofaic_status: MofaicStatus; physical_doc_status: PhysicalDocStatus; total_count: number;
+        }[];
+      };
+      search_exceptions: {
+        Args: { p_status?: string | null; p_severity?: string | null; p_page?: number; p_page_size?: number };
+        Returns: {
+          id: string; shipment_id: string; shipment_ref: string; type_name: string; severity: string;
+          description: string; status: string; assigned_to_name: string | null; due_date: string | null;
+          created_at: string; resubmission_count: number; total_count: number;
+        }[];
+      };
+      get_report_shipments: {
+        Args: { p_report_key: string; p_page?: number; p_page_size?: number };
+        Returns: {
+          id: string; ref: string; supplier_name_snapshot: string; origin_country: string | null;
+          awb: string | null; eta: string | null; overall_status: OverallStatus; document_status: DocumentStatus;
+          customs_status: CustomsStatus; municipality_status: MunicipalityStatus; delivery_order_status: DeliveryOrderStatus;
+          mofaic_status: MofaicStatus; invoice_value: number | null; currency_code: string | null;
+          net_weight: number | null; gross_weight: number | null; mofaic_due_date: string | null;
+          mofaic_days_left: number | null; total_count: number;
+        }[];
+      };
+      get_report_supplier_performance: {
+        Args: { p_page?: number; p_page_size?: number };
+        Returns: {
+          supplier_name: string; total_shipments: number; completed_shipments: number;
+          open_exceptions: number; avg_days_to_complete: number | null; total_count: number;
         }[];
       };
 
@@ -421,6 +481,101 @@ export interface Database {
           p_sha256_hash: string; p_expiry_date?: string | null;
         };
         Returns: Database["public"]["Tables"]["document_versions"]["Row"];
+      };
+
+      // ---------- Module 4: profile/discovery administration ----------
+      deactivate_profile: { Args: { p_profile_id: string }; Returns: Database["public"]["Tables"]["profiles"]["Row"] };
+      reactivate_profile: { Args: { p_profile_id: string }; Returns: Database["public"]["Tables"]["profiles"]["Row"] };
+      change_user_role: {
+        Args: { p_profile_id: string; p_new_role: AppRole; p_new_branch_id?: string | null };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
+      update_discovery_item: {
+        Args: { p_discovery_id: string; p_status: DiscoveryStatus; p_notes?: string | null };
+        Returns: Database["public"]["Tables"]["discovery_items"]["Row"];
+      };
+
+      // ---------- Module 4: master data upserts ----------
+      upsert_branch: {
+        Args: { p_id: string | null; p_code: string; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["branches"]["Row"];
+      };
+      upsert_country: {
+        Args: { p_id: string | null; p_iso_code: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["countries"]["Row"];
+      };
+      upsert_port: {
+        Args: { p_id: string | null; p_code: string; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["ports"]["Row"];
+      };
+      upsert_airline: {
+        Args: { p_id: string | null; p_code: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["airlines"]["Row"];
+      };
+      upsert_freight_agent: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["freight_agents"]["Row"];
+      };
+      upsert_clearing_agent: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["clearing_agents"]["Row"];
+      };
+      upsert_carrier: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["carriers"]["Row"];
+      };
+      upsert_courier_company: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["courier_companies"]["Row"];
+      };
+      upsert_shipment_category: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["shipment_categories"]["Row"];
+      };
+      upsert_document_type: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["document_types"]["Row"];
+      };
+      upsert_exception_type: {
+        Args: { p_id: string | null; p_name: string; p_is_active?: boolean; p_display_order?: number };
+        Returns: Database["public"]["Tables"]["exception_types"]["Row"];
+      };
+      upsert_currency: {
+        Args: { p_code: string; p_name: string; p_is_active?: boolean };
+        Returns: Database["public"]["Tables"]["currencies"]["Row"];
+      };
+      upsert_fx_rate: {
+        Args: { p_currency_code: string; p_effective_date: string; p_rate_to_aed: number; p_source?: string };
+        Returns: Database["public"]["Tables"]["fx_rates"]["Row"];
+      };
+
+      // ---------- Module 4: historical import ----------
+      create_import_batch: {
+        Args: { p_file_name: string; p_file_sha256: string; p_chunk_size?: number };
+        Returns: Database["public"]["Tables"]["import_batches"]["Row"];
+      };
+      stage_import_rows: {
+        Args: { p_batch_id: string; p_rows: unknown };
+        Returns: { staged_count: number; skipped_count: number }[];
+      };
+      set_import_reconciliation_expected: {
+        Args: { p_batch_id: string; p_month_label: string; p_expected_count: number };
+        Returns: { batch_id: string; month_label: string; expected_count: number; committed_count: number };
+      };
+      fn_validate_import_batch: { Args: { p_batch_id: string }; Returns: void };
+      fn_commit_import_batch_chunk: {
+        Args: { p_batch_id: string; p_default_branch_id: string; p_default_category_id: string };
+        Returns: { committed_this_chunk: number; remaining: number; batch_status: ImportBatchStatus }[];
+      };
+      get_import_batch_status: { Args: { p_batch_id: string }; Returns: unknown };
+      list_import_batches: {
+        Args: { p_page?: number; p_page_size?: number };
+        Returns: {
+          id: string; file_name: string; status: ImportBatchStatus; total_rows: number | null;
+          valid_rows: number | null; warning_rows: number | null; invalid_rows: number | null;
+          uploaded_at: string; committed_at: string | null; reconciliation_passed: boolean | null;
+          failure_reason: string | null; total_count: number;
+        }[];
       };
     };
     Enums: { app_role: AppRole; overall_status: OverallStatus };

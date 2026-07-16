@@ -943,3 +943,213 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- MODULE 3 — cross-shipment workspaces & reports
+-- ============================================================
+begin;
+select plan(11);
+
+create temp table t_fixture_m3 as
+select
+  (select id from profiles where role = 'customs_clearance_user' limit 1) as dxb_user,
+  (select id from profiles where role = 'shipment_supervisor' limit 1) as dxb_supervisor,
+  (select s.id from shipments s join branches b on b.id = s.branch_id where b.code = 'DXB-AIR' limit 1) as dxb_shipment,
+  (select s.id from shipments s join branches b on b.id = s.branch_id where b.code = 'AUH' limit 1) as auh_shipment,
+  (select id from exception_types limit 1) as etype;
+grant select on t_fixture_m3 to authenticated;
+
+-- Raise one exception on each branch's shipment so branch-scoping is
+-- actually exercised, not just trivially empty on both sides.
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_user::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select raise_exception((select dxb_shipment from t_fixture_m3), (select etype from t_fixture_m3), 'Critical', 'DXB test exception', null, null);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select raise_exception((select auh_shipment from t_fixture_m3), (select etype from t_fixture_m3), 'Low', 'AUH test exception', null, null);
+reset role;
+
+-- ============================================================
+-- search_exceptions
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_user::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select count(*)::int from search_exceptions(null, null, 1, 25)),
+  1, 'DXB customs_clearance_user sees exactly 1 exception (their own branch''s), not the AUH one'
+);
+select is(
+  (select count(*)::int from search_exceptions(null, 'Critical', 1, 25)),
+  1, 'severity filter narrows correctly'
+);
+select is(
+  (select count(*)::int from search_exceptions(null, 'Low', 1, 25)),
+  0, 'severity filter correctly excludes a severity with no matching in-branch rows'
+);
+select throws_ok(
+  $$ select * from search_exceptions('NotARealStatus', null, 1, 25) $$,
+  '23514', null, 'search_exceptions rejects an invalid status value'
+);
+select throws_ok(
+  $$ select * from search_exceptions(null, 'NotARealSeverity', 1, 25) $$,
+  '23514', null, 'search_exceptions rejects an invalid severity value'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select count(*)::int from search_exceptions(null, null, 1, 25)),
+  2, 'shipment_supervisor (view_all_branches) sees both the DXB and AUH exceptions'
+);
+reset role;
+
+-- ============================================================
+-- get_report_shipments
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_user::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  $$ select * from get_report_shipments('not_a_real_report', 1, 25) $$,
+  '23514', null, 'get_report_shipments rejects an unrecognized report key'
+);
+select ok(
+  (select count(*)::int from get_report_shipments('pending', 1, 100)) >= 0,
+  'get_report_shipments(pending) runs without error for an ordinary user'
+);
+select is(
+  (select bool_and(s.branch_id = (select branch_id from profiles where id = (select dxb_user from t_fixture_m3)))
+   from get_report_shipments('pending', 1, 500) r join shipments s on s.id = r.id),
+  true, 'get_report_shipments only returns the caller''s own branch when they lack view_all_branches'
+);
+reset role;
+
+-- ============================================================
+-- get_report_supplier_performance
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture_m3), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select count(*)::int from get_report_supplier_performance(1, 50)) >= 1,
+  'get_report_supplier_performance returns at least one supplier row for a view_all_branches user'
+);
+select ok(
+  (select bool_and(open_exceptions >= 0) from get_report_supplier_performance(1, 50)),
+  'open_exceptions is never negative (sanity check on the correlated subquery)'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- MODULE 4 — master data permission gating + full import pipeline
+-- ============================================================
+begin;
+select plan(11);
+
+create temp table t_fixture_m4 as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from profiles where role = 'shipment_data_entry' limit 1) as ordinary_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id;
+grant select on t_fixture_m4 to authenticated;
+
+-- ============================================================
+-- Master data: ordinary users cannot write, admins can
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select ordinary_id::text from t_fixture_m4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  $$ select * from upsert_country(null, 'ZZ', 'Not A Real Country', true, 0) $$,
+  '42501', null, 'an ordinary user without administer cannot call upsert_country'
+);
+reset role;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_m4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_country_result as
+select id as country_id from upsert_country(null, 'ZZ', 'Test Country M4', true, 0);
+grant select on t_country_result to authenticated;
+select upsert_currency('ZZZ', 'Test Currency M4', true);
+reset role;
+
+select ok((select country_id from t_country_result) is not null, 'an administer-permission user CAN call upsert_country');
+select is(
+  (select name from countries where id = (select country_id from t_country_result)),
+  'Test Country M4', 'upsert_country actually persisted the row'
+);
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_m4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  $$ select * from upsert_fx_rate('ZZZ', current_date, -5, 'manual') $$,
+  '23514', null, 'upsert_fx_rate rejects a non-positive rate'
+);
+select throws_ok(
+  $$ select * from upsert_fx_rate('NOTREAL', current_date, 1, 'manual') $$,
+  'P0002', null, 'upsert_fx_rate rejects an unrecognized currency code'
+);
+reset role;
+
+-- ============================================================
+-- Historical import: full pipeline, mirroring the manual functional test
+-- ============================================================
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_m4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_batch as
+select id as batch_id from create_import_batch('pgtap_test_import.xlsx', 'sha_pgtap_test_import', 500);
+grant select on t_batch to authenticated;
+reset role;
+
+select ok((select batch_id from t_batch) is not null, 'create_import_batch succeeds for an admin');
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_m4), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  $$ select * from create_import_batch('another.xlsx', 'sha_pgtap_test_import', 500) $$,
+  '23505', null, 'create_import_batch rejects a duplicate file hash'
+);
+
+create temp table t_stage_result as
+select * from stage_import_rows((select batch_id from t_batch),
+  '[
+    {"source_row_number": 1, "source_month": "January", "raw_values": {"supplier":"pgTAP Supplier A","invoice_no":"PGTAP-001","invoice_date":"2025-01-05","invoice_value":100,"currency":"AED"}},
+    {"source_row_number": 2, "source_month": "January", "raw_values": {"supplier":"pgTAP Supplier B","invoice_no":"PGTAP-002","invoice_date":"garbage","invoice_value":200,"currency":"AED"}}
+  ]'::jsonb
+);
+grant select on t_stage_result to authenticated;
+select fn_validate_import_batch((select batch_id from t_batch));
+select set_import_reconciliation_expected((select batch_id from t_batch), 'January', 1);
+create temp table t_commit_result as
+select * from fn_commit_import_batch_chunk((select batch_id from t_batch), (select branch_id from t_fixture_m4), (select cat_id from t_fixture_m4));
+grant select on t_commit_result to authenticated;
+reset role;
+
+select is((select staged_count from t_stage_result), 2, 'stage_import_rows stages both rows (validation happens separately, not at staging time)');
+select is(
+  (select invalid_rows from import_batches where id = (select batch_id from t_batch)),
+  1, 'fn_validate_import_batch correctly flags the malformed-date row as invalid'
+);
+select is((select batch_status from t_commit_result), 'Committed', 'the batch reaches Committed when reconciliation matches (1 valid row, expected 1)');
+select is(
+  (select count(*)::int from shipments where import_batch_id = (select batch_id from t_batch)),
+  1, 'exactly one shipment was actually created from the one valid row'
+);
+
+select * from finish();
+rollback;
