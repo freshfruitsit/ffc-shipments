@@ -67,8 +67,8 @@ export default async function DashboardPage() {
 
   const kpiCards: { icon: typeof LayoutGrid; value: number; label: string; trend: string; up: boolean; href: string }[] = [
     { icon: LayoutGrid, value: k.active_shipments, label: "Active Shipments", trend: "+4.2% vs last month", up: true, href: "/shipments" },
-    { icon: PlaneLanding, value: k.arriving_today, label: "Arriving Today", trend: "scheduled flights", up: true, href: "/shipments" },
-    { icon: CalendarDays, value: k.arriving_this_week, label: "Arriving This Week", trend: "next 7 days", up: true, href: "/shipments" },
+    { icon: PlaneLanding, value: k.arriving_today, label: "Arriving Today", trend: "scheduled flights", up: true, href: "/shipments?view=today" },
+    { icon: CalendarDays, value: k.arriving_this_week, label: "Arriving This Week", trend: "next 7 days", up: true, href: "/shipments?view=week" },
     { icon: FileText, value: k.documents_pending, label: "Documents Pending", trend: "needs verification", up: false, href: "/documents" },
     { icon: ShieldCheck, value: k.customs_pending, label: "Customs Pending", trend: "Dubai Customs entry & clearance", up: false, href: "/customs" },
     { icon: Truck, value: k.delivery_orders_pending, label: "Delivery Orders Pending", trend: "awaiting carrier", up: false, href: "/delivery-orders" },
