@@ -110,10 +110,10 @@ export function CreateShipmentWizard(props: {
           <Step3Invoices shipmentId={shipmentId} currencies={props.currencies} onNext={goNext} onBack={goBack} onSaveAsDraft={handleSaveAsDraft} />
         )}
         {step === 4 && shipmentId && (
-          <Step4Documents shipmentId={shipmentId} documentTypes={props.documentTypes} onNext={goNext} onBack={goBack} onSaveAsDraft={handleSaveAsDraft} />
+          <Step5Customs shipmentId={shipmentId} onNext={goNext} onBack={goBack} onSaveAsDraft={handleSaveAsDraft} />
         )}
         {step === 5 && shipmentId && (
-          <Step5Customs shipmentId={shipmentId} onNext={goNext} onBack={goBack} onSaveAsDraft={handleSaveAsDraft} />
+          <Step4Documents shipmentId={shipmentId} documentTypes={props.documentTypes} onNext={goNext} onBack={goBack} onSaveAsDraft={handleSaveAsDraft} />
         )}
         {step === 6 && shipmentId && (
           <Step6DeliveryMofaic

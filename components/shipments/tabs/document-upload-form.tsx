@@ -17,7 +17,11 @@ async function sha256Hex(file: File): Promise<string> {
     .join("");
 }
 
-export function DocumentUploadForm({ shipmentId, documentTypes }: { shipmentId: string; documentTypes: DocType[] }) {
+export function DocumentUploadForm({
+  shipmentId, documentTypes, onUploaded,
+}: {
+  shipmentId: string; documentTypes: DocType[]; onUploaded?: () => void;
+}) {
   const [documentTypeId, setDocumentTypeId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "error" | "done">("idle");
@@ -85,8 +89,13 @@ export function DocumentUploadForm({ shipmentId, documentTypes }: { shipmentId: 
       setFile(null);
       setDocumentTypeId("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      // Force a fresh server render of the documents list.
-      window.location.reload();
+      // In the wizard, a full reload would wipe the in-memory step/
+      // shipmentId state and dump the user back to step 1 — onUploaded
+      // lets the caller refresh just its own document list instead. The
+      // standalone Documents tab doesn't pass this prop, so it keeps the
+      // simpler reload (there's no wizard state to lose there).
+      if (onUploaded) onUploaded();
+      else window.location.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
       setStatus("error");

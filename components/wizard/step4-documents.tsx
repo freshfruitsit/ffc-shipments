@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DocumentUploadForm } from "@/components/shipments/tabs/document-upload-form";
+import { DocumentCard } from "@/components/shipments/tabs/document-card";
 
 type Option = { id: string; name: string };
+type DocumentsData = {
+  documents: {
+    document_id: string; document_type_name: string;
+    current_version: {
+      version_number: number; status: string; storage_path: string; original_filename: string;
+      uploaded_at: string; uploaded_by_name: string | null;
+    };
+  }[];
+  can_upload: boolean;
+};
 
 export function Step4Documents({
   shipmentId,
@@ -19,18 +30,35 @@ export function Step4Documents({
   onBack: () => void;
   onSaveAsDraft: () => void;
 }) {
-  const [uploadedCount, setUploadedCount] = useState<number | null>(null);
+  const [tab, setTab] = useState<DocumentsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // DocumentUploadForm reloads the page on a successful upload, so a fresh
-  // count is always available whenever this step mounts.
-  useEffect(() => {
+  // Item (screenshot audit): this used to only show a document COUNT,
+  // with no way to actually see or open what had been uploaded — the
+  // real fix is showing the same file list + Preview/Replace/Archive
+  // the standalone Documents tab already has (DocumentCard), not just a
+  // number. Fetched client-side (this step is inside a client-only
+  // wizard) via the same tab-context RPC the standalone page uses
+  // server-side, so the two stay consistent by construction.
+  const refresh = useCallback(async () => {
     const supabase = createClient();
-    supabase
-      .from("documents")
-      .select("*", { count: "exact", head: true })
-      .eq("shipment_id", shipmentId)
-      .then(({ count }) => setUploadedCount(count ?? 0));
+    const { data, error: rpcError } = await supabase.rpc("get_shipment_documents_tab", { p_shipment_id: shipmentId });
+    if (rpcError) {
+      setError("Couldn't load the document list right now.");
+      return;
+    }
+    setTab(data as unknown as DocumentsData);
+    setError(null);
   }, [shipmentId]);
+
+  useEffect(() => {
+    // refresh() is async and only calls setState after awaiting the RPC —
+    // never synchronously within this effect body — which is the actual
+    // condition this rule exists to catch; this call just doesn't match
+    // the unsafe shape it's pattern-matching against.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, [refresh]);
 
   return (
     <div>
@@ -39,9 +67,35 @@ export function Step4Documents({
         continuing.
       </p>
 
-      {uploadedCount !== null && <p className="mb-3 text-xs text-ink-muted">{uploadedCount} document(s) uploaded so far.</p>}
+      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
-      <DocumentUploadForm shipmentId={shipmentId} documentTypes={documentTypes} />
+      {tab && (
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {tab.documents.length === 0 && (
+            <p className="col-span-full rounded-lg border border-dashed border-border bg-surface-muted/40 p-4 text-center text-sm text-ink-muted">
+              No documents uploaded yet.
+            </p>
+          )}
+          {tab.documents.map((doc) => (
+            <DocumentCard
+              key={doc.document_id}
+              shipmentId={shipmentId}
+              documentId={doc.document_id}
+              typeName={doc.document_type_name}
+              filename={doc.current_version.original_filename}
+              versionNumber={doc.current_version.version_number}
+              status={doc.current_version.status}
+              uploadedAt={doc.current_version.uploaded_at}
+              uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
+              storagePath={doc.current_version.storage_path}
+              canEdit={tab.can_upload}
+              onChanged={refresh}
+            />
+          ))}
+        </div>
+      )}
+
+      <DocumentUploadForm shipmentId={shipmentId} documentTypes={documentTypes} onUploaded={refresh} />
 
       <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
         <button type="button" onClick={onSaveAsDraft} className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted">

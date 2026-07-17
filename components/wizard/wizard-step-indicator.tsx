@@ -1,6 +1,6 @@
 const WIZ_STEPS = [
-  "Basic Info", "Transport", "Invoices", "Documents",
-  "Customs & Compliance", "Delivery Order & MOFAIC", "Physical Documents", "Review & Submit",
+  "Basic Info", "Transport", "Invoices", "Customs & Compliance",
+  "Documents", "Delivery Order & MOFAIC", "Physical Documents", "Review & Submit",
 ];
 
 export function WizardStepIndicator({ currentStep, onStepClick }: { currentStep: number; onStepClick: (n: number) => void }) {

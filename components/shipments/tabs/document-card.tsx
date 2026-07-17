@@ -24,6 +24,7 @@ export function DocumentCard({
   uploadedByName,
   storagePath,
   canEdit,
+  onChanged,
 }: {
   shipmentId: string;
   documentId: string;
@@ -35,6 +36,7 @@ export function DocumentCard({
   uploadedByName: string;
   storagePath: string;
   canEdit: boolean;
+  onChanged?: () => void;
 }) {
   const [previewing, setPreviewing] = useState(false);
   const [replacing, setReplacing] = useState(false);
@@ -79,7 +81,7 @@ export function DocumentCard({
       });
       if (finalizeResult.error) throw new Error(finalizeResult.error);
 
-      window.location.reload();
+      if (onChanged) onChanged(); else window.location.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Replace failed.");
     } finally {
@@ -93,8 +95,13 @@ export function DocumentCard({
     setArchiving(true);
     const result = await archiveDocumentAction(documentId, shipmentId, reason);
     setArchiving(false);
-    if (result.error) setError(result.error);
-    else window.location.reload();
+    if (result.error) {
+      setError(result.error);
+    } else if (onChanged) {
+      onChanged();
+    } else {
+      window.location.reload();
+    }
   }
 
   return (
