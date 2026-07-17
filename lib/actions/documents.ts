@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyRpcError } from "@/lib/actions/errors";
 import type { ActionState } from "@/lib/actions/shipment-detail";
-import { BUCKET } from "@/lib/storage-constants";
+import { getR2DownloadUrlAction, verifyR2ObjectExistsAction } from "@/lib/actions/r2-storage";
 
 export type RegisterUploadState = {
   error?: string;
@@ -75,11 +75,13 @@ const FinalizeSchema = z.object({
 });
 
 /**
- * Step 2 (after the browser has uploaded the actual bytes to Storage via
- * the signed URL): record the document metadata. upload_document_metadata
- * itself re-verifies the Storage object actually exists and the intent is
- * valid/unfulfilled before accepting this — see item 5 of the round-3
- * SQL review.
+ * Step 2 (after the browser has uploaded the actual bytes to R2 via the
+ * presigned URL): record the document metadata. upload_document_metadata
+ * no longer verifies the object exists itself (R2 objects don't live
+ * anywhere Postgres can see directly) — that verification happens right
+ * here instead, via a real HeadObject call against R2, before the RPC is
+ * ever called. Same guarantee as before (item 5 of the original round-3
+ * SQL review), just enforced at the layer that can actually reach R2.
  */
 export async function finalizeUploadAction(input: {
   shipment_id: string;
@@ -96,8 +98,14 @@ export async function finalizeUploadAction(input: {
   if (!parsed.success) {
     return { error: "Invalid upload details." };
   }
-  const supabase = await createClient();
   const d = parsed.data;
+
+  const { exists } = await verifyR2ObjectExistsAction(d.storage_path);
+  if (!exists) {
+    return { error: "The file doesn't appear to have finished uploading. Try again." };
+  }
+
+  const supabase = await createClient();
   const { error } = await supabase.rpc("upload_document_metadata", {
     p_shipment_id: d.shipment_id,
     p_document_id: d.document_id,
@@ -114,11 +122,11 @@ export async function finalizeUploadAction(input: {
   return { success: true };
 }
 
+/** Now generates an R2 presigned GET URL instead of a Supabase Storage one — see lib/actions/r2-storage.ts for the permission check this replicates. */
 export async function getSignedDownloadUrlAction(storagePath: string): Promise<{ url?: string; error?: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 300);
-  if (error || !data) return { error: "Couldn't generate a download link." };
-  return { url: data.signedUrl };
+  const result = await getR2DownloadUrlAction(storagePath);
+  if (result.error || !result.url) return { error: result.error ?? "Couldn't generate a download link." };
+  return { url: result.url };
 }
 
 const FinalizeReplaceSchema = z.object({
@@ -145,8 +153,14 @@ export async function finalizeReplaceAction(input: {
   if (!parsed.success) {
     return { error: "Invalid upload details." };
   }
-  const supabase = await createClient();
   const d = parsed.data;
+
+  const { exists } = await verifyR2ObjectExistsAction(d.storage_path);
+  if (!exists) {
+    return { error: "The file doesn't appear to have finished uploading. Try again." };
+  }
+
+  const supabase = await createClient();
   const { error } = await supabase.rpc("replace_document", {
     p_document_id: d.document_id,
     p_storage_path: d.storage_path,

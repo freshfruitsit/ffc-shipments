@@ -3,8 +3,7 @@
 import { useState, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { getSignedDownloadUrlAction, registerUploadIntentAction, finalizeReplaceAction, archiveDocumentAction } from "@/lib/actions/documents";
-import { BUCKET } from "@/lib/storage-constants";
-import { createClient } from "@/lib/supabase/client";
+import { getR2UploadUrlAction } from "@/lib/actions/r2-storage";
 import { formatDubaiDate } from "@/lib/dates";
 
 async function sha256Hex(file: File): Promise<string> {
@@ -60,14 +59,16 @@ export function DocumentCard({
       if (registerResult.error || !registerResult.intent) throw new Error(registerResult.error ?? "Couldn't register the upload.");
       const { storagePath: newPath } = registerResult.intent;
 
-      const supabase = createClient();
-      const { data: signed, error: signError } = await supabase.storage.from(BUCKET).createSignedUploadUrl(newPath);
-      if (signError || !signed) throw new Error("Couldn't get an upload location.");
+      const contentType = file.type || "application/octet-stream";
+      const signedResult = await getR2UploadUrlAction(shipmentId, documentId, newPath, contentType);
+      if (signedResult.error || !signedResult.url) throw new Error(signedResult.error ?? "Couldn't get an upload location.");
 
-      const { error: uploadError } = await supabase.storage.from(BUCKET).uploadToSignedUrl(newPath, signed.token, file, {
-        contentType: file.type || "application/octet-stream",
+      const putResponse = await fetch(signedResult.url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": contentType },
       });
-      if (uploadError) throw new Error("Upload failed: " + uploadError.message);
+      if (!putResponse.ok) throw new Error(`Upload failed (${putResponse.status}).`);
 
       const hash = await sha256Hex(file);
       const finalizeResult = await finalizeReplaceAction({

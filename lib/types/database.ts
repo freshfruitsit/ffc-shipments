@@ -269,6 +269,18 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["mofaic_rules"]["Row"]>;
         Relationships: [];
       };
+      upload_intents: {
+        Row: {
+          id: string; shipment_id: string; document_id: string; storage_path: string;
+          requested_by: string | null; expected_mime_type: string | null; expected_file_size: number | null;
+          expected_sha256_hash: string | null; requested_at: string; expires_at: string;
+          fulfilled: boolean; fulfilled_at: string | null; cleanup_status: string;
+          cleanup_attempts: number; cleanup_last_attempted_at: string | null; cleanup_error: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["upload_intents"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["upload_intents"]["Row"]>;
+        Relationships: [];
+      };
       role_permissions: {
         Row: { role: AppRole; permission: string; allowed: boolean };
         Insert: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
@@ -577,6 +589,7 @@ export interface Database {
           failure_reason: string | null; total_count: number;
         }[];
       };
+      fn_can_access_document_by_path: { Args: { p_storage_path: string }; Returns: boolean };
     };
     Enums: { app_role: AppRole; overall_status: OverallStatus };
   };

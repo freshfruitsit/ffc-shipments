@@ -2,9 +2,8 @@
 
 import { useState, useRef } from "react";
 import { Upload, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { registerUploadIntentAction, finalizeUploadAction } from "@/lib/actions/documents";
-import { BUCKET } from "@/lib/storage-constants";
+import { getR2UploadUrlAction } from "@/lib/actions/r2-storage";
 import { selectClass } from "@/components/ui/form";
 
 type DocType = { id: string; name: string };
@@ -39,37 +38,39 @@ export function DocumentUploadForm({
 
     try {
       // Step 1: register the intent — the RPC checks branch access +
-      // upload_docs permission before an object can ever be written.
+      // upload_docs permission before a presigned upload URL can ever be
+      // minted for this path (see getR2UploadUrlAction, which re-checks
+      // this exact intent before generating anything).
       const registerResult = await registerUploadIntentAction(shipmentId, file.name, file.size, file.type);
       if (registerResult.error || !registerResult.intent) {
         throw new Error(registerResult.error ?? "Couldn't register the upload.");
       }
       const { documentId, storagePath } = registerResult.intent;
 
-      // Step 2: upload the actual bytes DIRECTLY to Storage from the
-      // browser, using a signed upload URL — never routed through a Server
-      // Action (which would hit body-size limits for large PDFs/scans).
-      const supabase = createClient();
-      const { data: signed, error: signError } = await supabase.storage
-        .from(BUCKET)
-        .createSignedUploadUrl(storagePath);
-      if (signError || !signed) {
-        throw new Error("Couldn't get an upload location. " + (signError?.message ?? ""));
+      // Step 2: get a presigned PUT URL for Cloudflare R2 and upload the
+      // actual bytes DIRECTLY from the browser — never routed through a
+      // Server Action (which would hit body-size limits for large
+      // PDFs/scans). This is the same "direct to storage" shape as
+      // before, just against R2 instead of Supabase Storage.
+      const contentType = file.type || "application/octet-stream";
+      const signedResult = await getR2UploadUrlAction(shipmentId, documentId, storagePath, contentType);
+      if (signedResult.error || !signedResult.url) {
+        throw new Error(signedResult.error ?? "Couldn't get an upload location.");
       }
 
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .uploadToSignedUrl(storagePath, signed.token, file, {
-          contentType: file.type || "application/octet-stream",
-        });
-      if (uploadError) {
-        throw new Error("Upload failed: " + uploadError.message);
+      const putResponse = await fetch(signedResult.url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": contentType },
+      });
+      if (!putResponse.ok) {
+        throw new Error(`Upload failed (${putResponse.status}).`);
       }
 
       // Step 3: hash the file client-side and finalize the metadata row —
-      // upload_document_metadata re-verifies the object actually exists and
-      // the intent is valid before accepting this, so a client that lies
-      // about the hash/size still can't register a phantom row.
+      // finalizeUploadAction re-verifies the object actually exists on R2
+      // and the intent is valid before accepting this, so a client that
+      // lies about the hash/size still can't register a phantom row.
       const hash = await sha256Hex(file);
       const finalizeResult = await finalizeUploadAction({
         shipment_id: shipmentId,

@@ -5,7 +5,7 @@
 -- Wrapped in BEGIN/ROLLBACK: nothing here persists against seed data.
 -- ============================================================
 begin;
-select plan(43);
+select plan(42);
 
 create temp table t_fixture as
 select
@@ -207,8 +207,12 @@ select is((select attempt_1 from t_resubmission_result), 1, 'first resubmission 
 select is((select attempt_2 from t_resubmission_result2), 2, 'second resubmission attempt is numbered 2, not a duplicate 1');
 
 -- ============================================================
--- SECTION 6: DOCUMENT MODEL (updated for the intent/Storage consistency
--- checks added in review round 3, §5/§6)
+-- SECTION 6: DOCUMENT MODEL (updated for the Cloudflare R2 migration —
+-- object existence is no longer checked here in SQL at all, since an R2
+-- object will never appear in Supabase's own storage.objects table; that
+-- verification now happens in application code (a real HeadObject call
+-- against R2) immediately before these functions are called. What SQL
+-- still fully enforces, unchanged: the upload_intents contract itself.)
 -- ============================================================
 set role authenticated;
 select set_config('app.current_user_id', (select dxb_customs::text from t_fixture), false);
@@ -223,35 +227,22 @@ update t_doc_fixture set
   v2_path = 'shipments/' || (select dxb_shipment::text from t_fixture) || '/' || doc_id::text || '/invoice_v2.pdf';
 grant select on t_doc_fixture to authenticated;
 
--- Negative: no upload intent registered yet, and no Storage object exists —
--- both must independently block a phantom metadata registration.
+-- Negative: no upload intent registered yet at all.
 select throws_ok(
   format(
     $$ select upload_document_metadata((select dxb_shipment from t_fixture), (select doc_id from t_doc_fixture), null,
          (select doc_type from t_doc_fixture), %L, 'invoice.pdf', 'application/pdf', 1000, 'hash1') $$,
     (select v1_path from t_doc_fixture)
-  ), '23514', null, 'upload_document_metadata rejects when no Storage object exists at the path yet'
+  ), '23514', null, 'upload_document_metadata rejects when no upload intent was ever registered'
 );
 
--- Register the intent, then create the matching Storage object (simulating
--- what a real signed-upload-URL flow does), then metadata registration
--- should succeed.
+-- Register the intent — metadata registration should now succeed on the
+-- strength of the intent alone (object existence is verified by the
+-- caller against R2 before this is ever reached, not by this function).
 select fn_register_upload_intent(
   (select dxb_shipment from t_fixture), (select doc_id from t_doc_fixture), (select v1_path from t_doc_fixture),
   'application/pdf', 1000, 'hash1'
 );
-
--- Negative: metadata registration still blocked until the Storage object
--- itself actually exists, even with a valid intent.
-select throws_ok(
-  format(
-    $$ select upload_document_metadata((select dxb_shipment from t_fixture), (select doc_id from t_doc_fixture), null,
-         (select doc_type from t_doc_fixture), %L, 'invoice.pdf', 'application/pdf', 1000, 'hash1') $$,
-    (select v1_path from t_doc_fixture)
-  ), '23514', null, 'upload_document_metadata still rejects with a valid intent but no Storage object yet'
-);
-
-insert into storage.objects (bucket_id, name) select 'shipment-documents', v1_path from t_doc_fixture;
 
 create temp table t_v1_result as
 select id as v1_id from upload_document_metadata(
@@ -259,12 +250,11 @@ select id as v1_id from upload_document_metadata(
   (select v1_path from t_doc_fixture), 'invoice.pdf', 'application/pdf', 1000, 'hash1'
 );
 
--- Replacement: same two-step (intent + object) before replace_document.
+-- Replacement: same simplified contract — just a valid intent.
 select fn_register_upload_intent(
   (select dxb_shipment from t_fixture), (select doc_id from t_doc_fixture), (select v2_path from t_doc_fixture),
   'application/pdf', 1100, 'hash2'
 );
-insert into storage.objects (bucket_id, name) select 'shipment-documents', v2_path from t_doc_fixture;
 
 create temp table t_v2_result as
 select id as v2_id from replace_document(
@@ -272,8 +262,8 @@ select id as v2_id from replace_document(
 );
 reset role;
 
-select ok((select v1_id from t_v1_result) is not null, 'upload_document_metadata succeeds once a matching intent AND Storage object both exist');
-select ok((select v2_id from t_v2_result) is not null, 'replace_document succeeds once a matching intent AND Storage object both exist');
+select ok((select v1_id from t_v1_result) is not null, 'upload_document_metadata succeeds on a valid intent alone (object existence checked by the caller, not here)');
+select ok((select v2_id from t_v2_result) is not null, 'replace_document succeeds on a valid intent alone (same reasoning)');
 select is(
   (select count(*)::int from document_versions where document_id = (select doc_id from t_doc_fixture) and is_current),
   1, 'exactly one is_current version after replace_document'
