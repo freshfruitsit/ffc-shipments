@@ -177,7 +177,7 @@ export async function updateMofaicAction(_prev: ActionState, formData: FormData)
 }
 
 const PHYSICAL_DOC_STATUSES = [
-  "Not Required", "Originals Pending", "Ready for Dispatch", "Dispatched",
+  "Not Required", "Pending", "Ready for Dispatch", "Dispatched",
   "In Transit", "Delivered", "Proof of Delivery Received", "Closed",
 ] as const;
 

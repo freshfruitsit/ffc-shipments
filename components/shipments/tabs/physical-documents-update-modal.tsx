@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, FormError, inputClass, selectClass } from "@/components/ui/form";
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
-const STATUSES = ["Not Required", "Originals Pending", "Ready for Dispatch", "Dispatched", "In Transit", "Delivered", "Proof of Delivery Received", "Closed"];
+const STATUSES = ["Not Required", "Pending", "Ready for Dispatch", "Dispatched", "In Transit", "Delivered", "Proof of Delivery Received", "Closed"];
 const initialState: ActionState = {};
 
 type Option = { id: string; name: string };

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { updatePhysicalDocumentsAction } from "@/lib/actions/portal-updates";
 
 type Option = { id: string; name: string };
-const STATUSES = ["Not Required", "Originals Pending", "Ready for Dispatch", "Dispatched", "In Transit", "Delivered", "Proof of Delivery Received", "Closed"];
+const STATUSES = ["Not Required", "Pending", "Ready for Dispatch", "Dispatched", "In Transit", "Delivered", "Proof of Delivery Received", "Closed"];
 
 export function Step7PhysicalDocs({
   shipmentId,
@@ -24,7 +24,7 @@ export function Step7PhysicalDocs({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [status, setStatus] = useState("Originals Pending");
+  const [status, setStatus] = useState("Pending");
   const [courierCompanyId, setCourierCompanyId] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [dispatchDate, setDispatchDate] = useState("");

@@ -86,7 +86,7 @@ export type MofaicStatus =
 
 export type PhysicalDocStatus =
   | "Not Required"
-  | "Originals Pending"
+  | "Pending"
   | "Ready for Dispatch"
   | "Dispatched"
   | "In Transit"

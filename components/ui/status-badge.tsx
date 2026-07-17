@@ -22,7 +22,7 @@ const OVERALL_STATUS_TIER: Record<string, "low" | "medium" | "high" | "critical"
 
 const DEFAULT_CRITICAL = ["Rejected", "Overdue", "Exception"];
 const DEFAULT_WARN = [
-  "Pending", "Payment Due", "Draft", "Under Review", "Originals Pending", "Requested", "Ready for Dispatch",
+  "Pending", "Payment Due", "Draft", "Under Review", "Requested", "Ready for Dispatch",
 ];
 
 const TIER_CLASS: Record<string, string> = {

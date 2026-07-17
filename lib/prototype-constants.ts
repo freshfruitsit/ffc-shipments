@@ -27,7 +27,7 @@ export const STATUS_SEVERITY = {
   },
   physicalDoc: {
     critical: [] as string[],
-    warn: ["Originals Pending", "Ready for Dispatch", "In Transit"],
+    warn: ["Pending", "Ready for Dispatch", "In Transit"],
   },
 } as const;
 
