@@ -7,7 +7,7 @@ import { friendlyRpcError } from "@/lib/actions/errors";
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
 const CUSTOMS_STATUSES = [
-  "Not Started", "Draft", "Request Created", "Submitted", "Declaration Created",
+  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
   "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
 ] as const;
 
@@ -48,7 +48,7 @@ export async function updateCustomsAction(_prev: ActionState, formData: FormData
 }
 
 const MUNICIPALITY_STATUSES = [
-  "Not Required", "Not Started", "Draft", "Submitted", "Under Review",
+  "Not Required", "Pending", "Draft", "Submitted", "Under Review",
   "Finished", "Rejected", "Resubmission Required",
 ] as const;
 

@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { updateCustomsAction, updateMunicipalityAction } from "@/lib/actions/portal-updates";
 
 const CUSTOMS_STATUSES = [
-  "Not Started", "Draft", "Request Created", "Submitted", "Declaration Created",
+  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
   "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
 ];
-const MUNICIPALITY_STATUSES = ["Not Required", "Not Started", "Draft", "Submitted", "Under Review", "Finished", "Rejected", "Resubmission Required"];
+const MUNICIPALITY_STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Under Review", "Finished", "Rejected", "Resubmission Required"];
 
 export function Step5Customs({
   shipmentId,
@@ -24,7 +24,7 @@ export function Step5Customs({
   const [pending, startTransition] = useTransition();
   const [declarationNo, setDeclarationNo] = useState("");
   const [customsSubmissionDate, setCustomsSubmissionDate] = useState("");
-  const [customsStatus, setCustomsStatus] = useState("Not Started");
+  const [customsStatus, setCustomsStatus] = useState("Pending");
   const [customsRemarks, setCustomsRemarks] = useState("");
   const [municipalityDraftRef, setMunicipalityDraftRef] = useState("");
   const [municipalitySubmittedRef, setMunicipalitySubmittedRef] = useState("");

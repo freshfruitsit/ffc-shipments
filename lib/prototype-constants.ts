@@ -7,15 +7,15 @@
 export const STATUS_SEVERITY = {
   document: {
     critical: ["Rejected"],
-    warn: ["Documents Pending", "Partially Complete", "Under Verification", "Not Started"],
+    warn: ["Documents Pending", "Partially Complete", "Under Verification", "Pending"],
   },
   customs: {
     critical: ["Rejected"],
-    warn: ["Draft", "Request Created", "Submitted", "Declaration Created", "Under Review", "Resubmission Required", "Not Started"],
+    warn: ["Draft", "Request Created", "Submitted", "Declaration Created", "Under Review", "Resubmission Required", "Pending"],
   },
   municipality: {
     critical: ["Rejected"],
-    warn: ["Draft", "Submitted", "Under Review", "Resubmission Required", "Not Started"],
+    warn: ["Draft", "Submitted", "Under Review", "Resubmission Required", "Pending"],
   },
   deliveryOrder: {
     critical: [] as string[],

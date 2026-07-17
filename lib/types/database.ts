@@ -36,7 +36,7 @@ export type OverallStatus =
   | "Cancelled";
 
 export type DocumentStatus =
-  | "Not Started"
+  | "Pending"
   | "Documents Pending"
   | "Partially Complete"
   | "Complete"
@@ -45,7 +45,7 @@ export type DocumentStatus =
   | "Rejected";
 
 export type CustomsStatus =
-  | "Not Started"
+  | "Pending"
   | "Draft"
   | "Request Created"
   | "Submitted"
@@ -58,7 +58,7 @@ export type CustomsStatus =
 
 export type MunicipalityStatus =
   | "Not Required"
-  | "Not Started"
+  | "Pending"
   | "Draft"
   | "Submitted"
   | "Under Review"

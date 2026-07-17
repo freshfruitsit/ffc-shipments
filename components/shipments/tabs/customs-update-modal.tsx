@@ -8,7 +8,7 @@ import { Field, FormError, inputClass, selectClass } from "@/components/ui/form"
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
 const STATUSES = [
-  "Not Started", "Draft", "Request Created", "Submitted", "Declaration Created",
+  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
   "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
 ];
 

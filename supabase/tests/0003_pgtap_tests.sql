@@ -362,8 +362,8 @@ select throws_ok(
   '23502', null, 'declaration number is required once customs_status reaches Declaration Created'
 );
 select lives_ok(
-  $$ select update_customs((select dxb_shipment from t_fixture), null, 'Not Started', null, null, null) $$,
-  'declaration number is NOT required while customs_status is Not Started'
+  $$ select update_customs((select dxb_shipment from t_fixture), null, 'Pending', null, null, null) $$,
+  'declaration number is NOT required while customs_status is Pending'
 );
 reset role;
 
