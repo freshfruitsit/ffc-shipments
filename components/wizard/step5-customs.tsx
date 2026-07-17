@@ -28,7 +28,7 @@ export function Step5Customs({
   const [customsRemarks, setCustomsRemarks] = useState("");
   const [municipalityDraftRef, setMunicipalityDraftRef] = useState("");
   const [municipalitySubmittedRef, setMunicipalitySubmittedRef] = useState("");
-  const [municipalityStatus, setMunicipalityStatus] = useState("Not Required");
+  const [municipalityStatus, setMunicipalityStatus] = useState("Pending");
   const [municipalitySubmissionDate, setMunicipalitySubmissionDate] = useState("");
   const [municipalityCompletionDate, setMunicipalityCompletionDate] = useState("");
   const [municipalityRemarks, setMunicipalityRemarks] = useState("");

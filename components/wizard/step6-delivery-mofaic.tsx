@@ -36,7 +36,7 @@ export function Step6DeliveryMofaic({
   const [doResponsible, setDoResponsible] = useState("");
   const [doRemarks, setDoRemarks] = useState("");
 
-  const [mofaicStatus, setMofaicStatus] = useState("Applicability Review");
+  const [mofaicStatus, setMofaicStatus] = useState("Pending");
   const [mofaicRef, setMofaicRef] = useState("");
   const [mofaicPaymentAmount, setMofaicPaymentAmount] = useState("");
   const [mofaicCurrency, setMofaicCurrency] = useState("AED");
