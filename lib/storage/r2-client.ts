@@ -10,8 +10,17 @@ import { S3Client } from "@aws-sdk/client-s3";
  * `server-only` guards against ever importing this into client code —
  * these credentials must never reach the browser.
  */
+/**
+ * .trim() defends against a real failure mode: a copy-pasted env var value
+ * picking up a trailing newline or stray whitespace in whatever UI it was
+ * entered through. An R2 bucket name (or any of these) with an embedded
+ * "\n" silently corrupts every URL built from it — R2 returns nothing
+ * usable, and the browser reports it as a CORS failure since a malformed/
+ * non-matching resource doesn't send back proper CORS headers either,
+ * which makes the REAL cause much harder to spot than it should be.
+ */
 function requireEnv(name: string): string {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
