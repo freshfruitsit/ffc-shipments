@@ -10,7 +10,9 @@ import { formatDubaiDateTime, formatMoney } from "@/lib/dates";
 type HeaderContext = {
   id: string; ref: string; mode: string; overall_status: string; priority: string;
   supplier_name_snapshot: string; eta: string | null; awb: string | null; flight: string | null;
-  physical_doc_status: string; document_status: string; updated_at: string; completion_eligible: boolean;
+  physical_doc_status: string; document_status: string; customs_status: string;
+  municipality_status: string; delivery_order_status: string;
+  created_at: string; updated_at: string; completion_eligible: boolean;
   port_name: string | null; responsible_name: string | null;
   invoice_totals: Record<string, number>;
   valid_status_transitions: { to_status: string; requires_reason: boolean }[];
@@ -86,8 +88,12 @@ export default async function ShipmentDetailLayout({
 
         <ShipmentStepper
           overallStatus={shipment.overall_status}
+          documentStatus={shipment.document_status}
+          customsStatus={shipment.customs_status}
+          municipalityStatus={shipment.municipality_status}
+          deliveryOrderStatus={shipment.delivery_order_status}
           physicalDocStatus={shipment.physical_doc_status}
-          lastUpdated={shipment.updated_at}
+          createdAt={shipment.created_at}
         />
       </div>
 
