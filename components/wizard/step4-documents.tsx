@@ -4,16 +4,18 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DocumentUploadForm } from "@/components/shipments/tabs/document-upload-form";
 import { DocumentCard } from "@/components/shipments/tabs/document-card";
+import { DocumentChecklist, type ChecklistItem } from "@/components/shipments/tabs/document-checklist";
 
 type Option = { id: string; name: string };
 type DocumentsData = {
   documents: {
-    document_id: string; document_type_name: string;
+    document_id: string; document_type_id: string; document_type_name: string;
     current_version: {
       id: string; version_number: number; status: string; storage_path: string; original_filename: string;
       uploaded_at: string; uploaded_by_name: string | null;
     };
   }[];
+  checklist: ChecklistItem[];
   can_upload: boolean;
   can_verify: boolean;
 };
@@ -61,43 +63,60 @@ export function Step4Documents({
     refresh();
   }, [refresh]);
 
+  const checklistTypeIds = new Set((tab?.checklist ?? []).map((c) => c.document_type_id));
+  const additionalDocuments = (tab?.documents ?? []).filter((doc) => !checklistTypeIds.has(doc.document_type_id));
+
   return (
     <div>
       <p className="mb-3 text-[12.5px] text-ink-muted">
-        Upload documents for this shipment — pick a type, then add the file. Add as many as needed before
-        continuing.
+        Upload the required documents below — each has its own slot, so there&apos;s no need to pick a type
+        first. Anything else can go in &quot;Upload Another Document&quot; further down.
       </p>
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
       {tab && (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {tab.documents.length === 0 && (
-            <p className="col-span-full rounded-lg border border-dashed border-border bg-surface-muted/40 p-4 text-center text-sm text-ink-muted">
-              No documents uploaded yet.
-            </p>
-          )}
-          {tab.documents.map((doc) => (
-            <DocumentCard
-              key={doc.document_id}
-              shipmentId={shipmentId}
-              documentId={doc.document_id}
-              documentVersionId={doc.current_version.id}
-              typeName={doc.document_type_name}
-              filename={doc.current_version.original_filename}
-              versionNumber={doc.current_version.version_number}
-              status={doc.current_version.status}
-              uploadedAt={doc.current_version.uploaded_at}
-              uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
-              storagePath={doc.current_version.storage_path}
-              canEdit={tab.can_upload}
-              canVerify={tab.can_verify}
-              onChanged={refresh}
-            />
-          ))}
+        <div className="mb-4">
+          <DocumentChecklist
+            shipmentId={shipmentId}
+            checklist={tab.checklist}
+            canEdit={tab.can_upload}
+            canVerify={tab.can_verify}
+            onChanged={refresh}
+          />
         </div>
       )}
 
+      {additionalDocuments.length > 0 && (
+        <div className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Additional Documents</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {additionalDocuments.map((doc) => (
+              <DocumentCard
+                key={doc.document_id}
+                shipmentId={shipmentId}
+                documentId={doc.document_id}
+                documentVersionId={doc.current_version.id}
+                typeName={doc.document_type_name}
+                filename={doc.current_version.original_filename}
+                versionNumber={doc.current_version.version_number}
+                status={doc.current_version.status}
+                uploadedAt={doc.current_version.uploaded_at}
+                uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
+                storagePath={doc.current_version.storage_path}
+                canEdit={tab?.can_upload ?? false}
+                canVerify={tab?.can_verify ?? false}
+                onChanged={refresh}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-2">
+        <h3 className="mb-1 text-sm font-semibold text-ink">Upload Another Document</h3>
+        <p className="mb-2 text-xs text-ink-muted">For anything not on the required checklist above.</p>
+      </div>
       <DocumentUploadForm shipmentId={shipmentId} documentTypes={documentTypes} onUploaded={refresh} />
 
       <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
