@@ -37,7 +37,14 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  // Only ever follow a genuine same-origin relative path — "/m" or
+  // "/dashboard", never anything starting with "//" or containing "://",
+  // which would be an open-redirect vector if blindly trusted from a
+  // query param. Falls back to /dashboard for anything that doesn't look
+  // like a safe internal path, same as the previous hardcoded behavior.
+  const next = formData.get("next");
+  const target = typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  redirect(target);
 }
 
 export async function logout() {

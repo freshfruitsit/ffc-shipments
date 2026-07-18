@@ -70,9 +70,17 @@ export type DeliveryOrderStatus =
   | "Not Required"
   | "Pending"
   | "Requested"
-  | "Received"
+  | "Received from Carrier"
   | "Uploaded"
   | "Verified";
+
+export type FlightStatus =
+  | "Booked"
+  | "Manifested"
+  | "Departed"
+  | "Delayed"
+  | "In Transit"
+  | "Cancelled";
 
 export type MofaicStatus =
   | "Not Applicable"
@@ -132,7 +140,7 @@ export interface Database {
           id: string; ref: string; internal_ref: string | null; mode: string; shipment_date: string;
           category_id: string | null; branch_id: string; supplier_id: string | null; supplier_name_snapshot: string;
           origin_country_id: string | null; priority: string; responsible: string | null; coordinator: string | null;
-          awb: string | null; airline_id: string | null; flight: string | null; eta: string | null; port_id: string | null;
+          awb: string | null; airline_id: string | null; flight: string | null; flight_status: FlightStatus; transit_airport: string | null; eta: string | null; port_id: string | null;
           freight_agent_id: string | null; clearing_agent_id: string | null;
           packages: number | null; net_weight: number | null; gross_weight: number | null; transport_remarks: string | null;
           overall_status: OverallStatus; document_status: DocumentStatus; customs_status: CustomsStatus;
@@ -341,7 +349,7 @@ export interface Database {
         Returns: { id: string; code: string | null; name: string }[];
       };
       search_shipments: {
-        Args: { p_query: string | null; p_status: OverallStatus | null; p_view: string | null; p_page: number; p_page_size: number };
+        Args: { p_query?: string | null; p_status?: OverallStatus | null; p_view?: string | null; p_page?: number; p_page_size?: number };
         Returns: {
           id: string; ref: string; supplier_name_snapshot: string; origin_country: string | null;
           awb: string | null; eta: string | null; port: string | null;
@@ -386,6 +394,7 @@ export interface Database {
           p_shipment_id: string; p_awb: string | null; p_airline_id: string | null; p_flight: string | null;
           p_eta: string | null; p_port_id: string | null; p_freight_agent_id: string | null; p_clearing_agent_id: string | null;
           p_packages: number | null; p_net_weight: number | null; p_gross_weight: number | null; p_transport_remarks: string | null;
+          p_flight_status?: FlightStatus; p_transit_airport?: string | null;
         };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
@@ -443,6 +452,10 @@ export interface Database {
       };
       change_shipment_status: {
         Args: { p_shipment_id: string; p_new_status: OverallStatus; p_reason?: string | null };
+        Returns: Database["public"]["Tables"]["shipments"]["Row"];
+      };
+      confirm_shipment_completion: {
+        Args: { p_shipment_id: string; p_notes?: string | null };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
       add_comment: {

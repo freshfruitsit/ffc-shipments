@@ -17,7 +17,7 @@ type HeaderContext = {
   invoice_totals: Record<string, number>;
   valid_status_transitions: { to_status: string; requires_reason: boolean }[];
   open_exception_count: number;
-  permissions: { assign: boolean; approve_status_change: boolean; manage_exceptions: boolean; edit_basic: boolean };
+  permissions: { assign: boolean; approve_status_change: boolean; manage_exceptions: boolean; edit_basic: boolean; close_reopen: boolean };
 };
 
 export default async function ShipmentDetailLayout({
@@ -66,11 +66,19 @@ export default async function ShipmentDetailLayout({
           <ShipmentActionBar
             shipmentId={id}
             validTransitions={shipment.valid_status_transitions}
+            completionEligible={shipment.completion_eligible}
             permissions={{
               assign: shipment.permissions.assign,
-              changeStatus: shipment.permissions.approve_status_change,
+              // Was gated on approve_status_change alone, which hid the
+              // button for any role whose valid transitions all require a
+              // different permission (edit_basic, edit_customs, etc.) —
+              // valid_status_transitions is now correctly filtered
+              // server-side to just what THIS user can actually do, so
+              // "any transitions available at all" is the right check.
+              changeStatus: shipment.valid_status_transitions.length > 0,
               raiseException: shipment.permissions.manage_exceptions,
               edit: shipment.permissions.edit_basic,
+              closeReopen: shipment.permissions.close_reopen,
             }}
           />
         </div>

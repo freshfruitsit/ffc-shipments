@@ -1230,3 +1230,407 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- REGRESSION TEST — change_shipment_status. A real bug shipped across two
+-- migrations (20260101000011, 20260101000012) where this function checked
+-- for a permission literally called 'update_status', which was never
+-- created anywhere in this schema — meaning NO role, including
+-- system_administrator, could ever change a shipment's overall status at
+-- all. The bug went undetected because nothing in this suite exercised
+-- change_shipment_status directly. This block exists specifically so
+-- that gap can't happen silently again.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_status as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id;
+grant select on t_fixture_status to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_status_shipment as
+select id, ref from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_status), (select branch_id from t_fixture_status),
+  null, 'Regression Test Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_status), 'REGRESSION-STATUS-TEST', null
+);
+grant select on t_status_shipment to authenticated;
+reset role;
+
+-- The exact real-world scenario that was broken: a system_administrator
+-- (the highest-privilege role in the system) changing a fresh Draft
+-- shipment's status at all.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_status_result as
+select overall_status from change_shipment_status((select id from t_status_shipment), 'Documents Pending', null);
+reset role;
+
+select is(
+  (select overall_status::text from t_status_result), 'Documents Pending',
+  'system_administrator can successfully change overall_status — the bogus update_status permission check is gone'
+);
+
+-- The permission gate itself must still genuinely work — this isn't just
+-- "no permission check ever runs now instead."
+select ok(
+  (select count(*)::int from status_transitions where required_permission is not null and required_permission != '') > 0,
+  'status_transitions still has real per-transition required_permission values driving the actual gate'
+);
+
+-- A truly invalid transition (not just a permission issue) must still be
+-- rejected — confirms fn_lock_shipment_for_mutation's null-permission
+-- call didn't accidentally weaken the transition-validity check itself.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  format($$ select change_shipment_status(%L, 'Completed', null) $$, (select id::text from t_status_shipment)),
+  '23514', null, 'jumping straight from Documents Pending to Completed is still correctly rejected as an invalid transition'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — verify_document / archive_document. Two more real
+-- bugs found while investigating why a shipment couldn't reach "Ready
+-- for Submission": verify_document's UPDATE used a CASE expression that
+-- Postgres didn't reliably cast to the doc_version_status enum, and the
+-- frontend was calling archive_document with a documents.id where a
+-- document_versions.id was required (a different row entirely) — every
+-- Archive attempt was failing with NOT_FOUND. Both were never caught
+-- because neither function had ever actually been called end-to-end
+-- before (verify_document wasn't wired into the UI at all; archive's
+-- bug was purely a frontend argument-passing mistake pgTAP wouldn't
+-- have caught unless it exercised the RPC directly, as it now does).
+-- ============================================================
+begin;
+select plan(4);
+
+create temp table t_fixture_verify as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id,
+  (select id from document_types limit 1) as doc_type_id;
+grant select on t_fixture_verify to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_verify_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
+  null, 'Verify Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST', null
+);
+grant select on t_verify_shipment to authenticated;
+
+create temp table t_verify_doc as
+select gen_random_uuid() as doc_id;
+alter table t_verify_doc add column test_path text;
+update t_verify_doc set test_path = 'shipments/' || (select id::text from t_verify_shipment) || '/' || doc_id::text || '/test.pdf';
+grant select on t_verify_doc to authenticated;
+
+select fn_register_upload_intent(
+  (select id from t_verify_shipment), (select doc_id from t_verify_doc), (select test_path from t_verify_doc),
+  'application/pdf', 100, 'h'
+);
+create temp table t_verify_version as
+select id from upload_document_metadata(
+  (select id from t_verify_shipment), (select doc_id from t_verify_doc), null, (select doc_type_id from t_fixture_verify),
+  (select test_path from t_verify_doc), 'test.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_verify_version to authenticated;
+reset role;
+
+-- verify_document (approve branch) — was failing with a type-cast error
+-- on every single call.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select status::text from verify_document((select id from t_verify_version), true, null)),
+  'Verified', 'verify_document(approve=true) succeeds and correctly sets status to Verified'
+);
+reset role;
+
+-- verify_document (reject branch) — same CASE expression, other side.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_verify_shipment2 as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
+  null, 'Verify Regression Co 2', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST-2', null
+);
+grant select on t_verify_shipment2 to authenticated;
+create temp table t_verify_doc2 as
+select gen_random_uuid() as doc_id;
+alter table t_verify_doc2 add column test_path text;
+update t_verify_doc2 set test_path = 'shipments/' || (select id::text from t_verify_shipment2) || '/' || doc_id::text || '/test2.pdf';
+grant select on t_verify_doc2 to authenticated;
+select fn_register_upload_intent(
+  (select id from t_verify_shipment2), (select doc_id from t_verify_doc2), (select test_path from t_verify_doc2),
+  'application/pdf', 100, 'h'
+);
+create temp table t_verify_version2 as
+select id from upload_document_metadata(
+  (select id from t_verify_shipment2), (select doc_id from t_verify_doc2), null, (select doc_type_id from t_fixture_verify),
+  (select test_path from t_verify_doc2), 'test2.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_verify_version2 to authenticated;
+select is(
+  (select status::text from verify_document((select id from t_verify_version2), false, 'test rejection')),
+  'Rejected', 'verify_document(approve=false) succeeds and correctly sets status to Rejected'
+);
+
+-- get_shipment_documents_tab returns a real, usable version id — the
+-- field that was missing entirely and is what archive/verify both need.
+select ok(
+  (select (get_shipment_documents_tab((select id from t_verify_shipment))->'documents'->0->'current_version'->>'id') is not null),
+  'get_shipment_documents_tab returns a non-null current_version.id'
+);
+
+-- archive_document — was failing with NOT_FOUND on every call because
+-- the frontend passed a documents.id where a document_versions.id was
+-- required. Calling it correctly (as this test now does, and as the
+-- fixed frontend now does) must actually succeed.
+select ok(
+  (select status::text from archive_document((select id from t_verify_version2), 'regression test archive')) = 'Archived',
+  'archive_document succeeds when called with the correct document_versions id'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — confirm_shipment_completion. This RPC, and the
+-- completion_eligible trigger behind it, were both already correct and
+-- working since Module 2 — but nothing in the frontend had ever called
+-- either, meaning no shipment could actually be marked Completed through
+-- the app at all (the same class of gap as verify_document). This test
+-- exercises the real end-to-end path: reject when not eligible, then
+-- genuinely drive a shipment through every subprocess to a real
+-- completion-eligible state and confirm the RPC succeeds.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_complete as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories where name = 'Fresh Fruits and Vegetables' limit 1) as cat_id;
+grant select on t_fixture_complete to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_complete), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_complete_shipment as
+select id, ref from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_complete), (select branch_id from t_fixture_complete),
+  null, 'Completion Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_complete), 'REGRESSION-COMPLETION-TEST', null
+);
+grant select on t_complete_shipment to authenticated;
+
+-- Fresh Draft shipment: not remotely eligible, and confirm_shipment_completion
+-- must reject it outright.
+select throws_ok(
+  format($$ select confirm_shipment_completion(%L, null) $$, (select id::text from t_complete_shipment)),
+  '23514', null, 'confirm_shipment_completion rejects a fresh Draft shipment as NOT_ELIGIBLE'
+);
+reset role;
+
+-- Drive every subprocess to a genuine terminal state (direct UPDATE as
+-- superuser here — the same pattern the rest of this suite already uses
+-- to set up preconditions the RPCs themselves don't expose a path to
+-- set directly; RLS correctly blocks this under the authenticated role,
+-- which is exactly why it's done here instead).
+update shipments set
+  customs_status = 'Approved', municipality_status = 'Finished',
+  delivery_order_status = 'Verified', mofaic_status = 'Not Applicable', physical_doc_status = 'Closed'
+where id = (select id from t_complete_shipment);
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_complete), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+
+-- Upload + verify all 5 required document types for this category.
+do $body$
+declare
+  v_sid uuid := (select id from t_complete_shipment);
+  v_type record;
+  v_doc_id uuid;
+  v_path text;
+  v_ver_id uuid;
+begin
+  for v_type in select id from document_types where name in ('Commercial Invoice','Packing List','Air Waybill','Certificate of Origin','Health Certificate') loop
+    v_doc_id := gen_random_uuid();
+    v_path := 'shipments/' || v_sid::text || '/' || v_doc_id::text || '/f.pdf';
+    perform fn_register_upload_intent(v_sid, v_doc_id, v_path, 'application/pdf', 100, 'h');
+    select id into v_ver_id from upload_document_metadata(v_sid, v_doc_id, null, v_type.id, v_path, 'f.pdf', 'application/pdf', 100, 'h');
+    perform verify_document(v_ver_id, true, null);
+  end loop;
+end $body$;
+
+-- Drive overall_status through the full real transition chain to Received.
+select change_shipment_status((select id from t_complete_shipment), 'Documents Pending', null);
+select change_shipment_status((select id from t_complete_shipment), 'Ready for Submission', null);
+select change_shipment_status((select id from t_complete_shipment), 'Submitted', null);
+select change_shipment_status((select id from t_complete_shipment), 'Customs Processing', null);
+select change_shipment_status((select id from t_complete_shipment), 'Clearance Pending', null);
+select change_shipment_status((select id from t_complete_shipment), 'Ready for Collection', null);
+select change_shipment_status((select id from t_complete_shipment), 'Received', null);
+
+select ok(
+  (select completion_eligible from shipments where id = (select id from t_complete_shipment)),
+  'completion_eligible correctly becomes true once every subprocess reaches a terminal state at Received'
+);
+
+select is(
+  (select overall_status::text from confirm_shipment_completion((select id from t_complete_shipment), 'regression test')),
+  'Completed', 'confirm_shipment_completion succeeds and sets overall_status to Completed once genuinely eligible'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — single-document upload model. Confirms the actual
+-- behavior change: a shipment in the "Fresh Fruits and Vegetables"
+-- category (which has 5 required_documents rows) now only needs ONE
+-- document verified to reach document_status = 'Verified' — the
+-- previous per-type-checklist logic would have required all 5.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_single as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories where name = 'Fresh Fruits and Vegetables' limit 1) as cat_id,
+  (select id from document_types where name = 'Shipment Documents' limit 1) as doc_type_id;
+grant select on t_fixture_single to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_single), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_single_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_single), (select branch_id from t_fixture_single),
+  null, 'Single Doc Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_single), 'REGRESSION-SINGLE-DOC-TEST', null
+);
+grant select on t_single_shipment to authenticated;
+
+select ok(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)) = 'Pending',
+  'a fresh shipment with zero documents uploaded starts at document_status = Pending'
+);
+
+create temp table t_single_doc as select gen_random_uuid() as doc_id;
+alter table t_single_doc add column test_path text;
+update t_single_doc set test_path = 'shipments/' || (select id::text from t_single_shipment) || '/' || doc_id::text || '/combined.pdf';
+grant select on t_single_doc to authenticated;
+
+select fn_register_upload_intent(
+  (select id from t_single_shipment), (select doc_id from t_single_doc), (select test_path from t_single_doc),
+  'application/pdf', 100, 'h'
+);
+create temp table t_single_version as
+select id from upload_document_metadata(
+  (select id from t_single_shipment), (select doc_id from t_single_doc), null, (select doc_type_id from t_fixture_single),
+  (select test_path from t_single_doc), 'combined.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_single_version to authenticated;
+
+select ok(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)) = 'Documents Pending',
+  'after ONE document is uploaded (not verified yet), document_status becomes Documents Pending — awaiting verification, not blocked on 4 other required types'
+);
+
+select verify_document((select id from t_single_version), true, null);
+
+select is(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)), 'Verified',
+  'verifying that ONE document is sufficient to reach document_status = Verified — the old per-type checklist would have required 5'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — flight status tracking + Delivery Order rename
+-- (Air Shipment team's requests from a real stakeholder meeting).
+-- ============================================================
+begin;
+select plan(5);
+
+create temp table t_fixture_flight as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id;
+grant select on t_fixture_flight to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_flight), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_flight_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_flight), (select branch_id from t_fixture_flight),
+  null, 'Flight Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_flight), 'REGRESSION-FLIGHT-TEST', null
+);
+grant select on t_flight_shipment to authenticated;
+
+select is(
+  (select flight_status::text from shipments where id = (select id from t_flight_shipment)),
+  'Booked', 'a fresh shipment defaults to flight_status = Booked'
+);
+
+select throws_ok(
+  format($$ select update_shipment_transport(%L, null, null, 'EK123', null, null, null, null, null, null, null, null, 'In Transit', null) $$, (select id::text from t_flight_shipment)),
+  '23514', null, 'setting flight_status to In Transit without a transit_airport is rejected'
+);
+
+select ok(
+  (select transit_airport = 'Doha (DOH)' from update_shipment_transport(
+    (select id from t_flight_shipment), null, null, 'EK123', null, null, null, null, null, null, null, null, 'In Transit', 'Doha (DOH)'
+  )),
+  'setting flight_status to In Transit WITH a transit_airport succeeds and stores it'
+);
+
+select ok(
+  (select transit_airport is null from update_shipment_transport(
+    (select id from t_flight_shipment), null, null, 'EK123', null, null, null, null, null, null, null, null, 'Departed', null
+  )),
+  'moving flight_status away from In Transit clears the stale transit_airport automatically'
+);
+
+select is(
+  (select delivery_order_status::text from update_delivery_order(
+    (select id from t_flight_shipment), null, 'Received from Carrier', null, null, false, null, null
+  )),
+  'Received from Carrier', 'delivery_order_status can be set to the renamed value Received from Carrier'
+);
+reset role;
+
+select * from finish();
+rollback;

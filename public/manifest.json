@@ -1,0 +1,16 @@
+{
+  "name": "FFC Shipments — Field",
+  "short_name": "FFC Field",
+  "description": "Check and update shipment status on the go — Dubai Air Freight Unit.",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F5F6F4",
+  "theme_color": "#07552F",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,13 +1,24 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { login, type LoginState } from "@/lib/actions/auth";
 
 const initialState: LoginState = {};
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
 
   return (
     <div className="flex min-h-screen">
@@ -36,6 +47,7 @@ export default function LoginPage() {
           </div>
 
           <form action={formAction} className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-sm">
+            {next && <input type="hidden" name="next" value={next} />}
             {state.error && (
               <div className="rounded-md bg-danger-light px-3 py-2 text-sm text-danger" role="alert">
                 {state.error}

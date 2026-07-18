@@ -90,7 +90,7 @@ export async function updateMunicipalityAction(_prev: ActionState, formData: For
   return { success: true };
 }
 
-const DELIVERY_ORDER_STATUSES = ["Not Required", "Pending", "Requested", "Received", "Uploaded", "Verified"] as const;
+const DELIVERY_ORDER_STATUSES = ["Not Required", "Pending", "Requested", "Received from Carrier", "Uploaded", "Verified"] as const;
 
 const DeliveryOrderSchema = z.object({
   shipment_id: z.string().uuid(),

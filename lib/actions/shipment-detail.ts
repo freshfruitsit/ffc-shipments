@@ -13,6 +13,8 @@ const TransportSchema = z.object({
   awb: z.string().trim().optional(),
   airline_id: z.string().uuid().optional().or(z.literal("")),
   flight: z.string().trim().optional(),
+  flight_status: z.enum(["Booked", "Manifested", "Departed", "Delayed", "In Transit", "Cancelled"]).default("Booked"),
+  transit_airport: z.string().trim().optional(),
   eta: z.string().optional(),
   port_id: z.string().uuid().optional().or(z.literal("")),
   freight_agent_id: z.string().uuid().optional().or(z.literal("")),
@@ -21,6 +23,9 @@ const TransportSchema = z.object({
   net_weight: z.coerce.number().optional(),
   gross_weight: z.coerce.number().optional(),
   transport_remarks: z.string().trim().optional(),
+}).refine((d) => d.flight_status !== "In Transit" || !!d.transit_airport, {
+  message: "Transit airport is required when flight status is In Transit",
+  path: ["transit_airport"],
 });
 
 export async function updateTransportAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -47,6 +52,8 @@ export async function updateTransportAction(_prev: ActionState, formData: FormDa
     p_net_weight: d.net_weight ?? null,
     p_gross_weight: d.gross_weight ?? null,
     p_transport_remarks: d.transport_remarks || null,
+    p_flight_status: d.flight_status,
+    p_transit_airport: d.transit_airport || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
   // Item 9 (performance): targets this specific tab's own path, not the
@@ -163,6 +170,38 @@ export async function changeShipmentStatusAction(_prev: ActionState, formData: F
   // whether they're enabled, so a status change can flip that on every
   // single tab at once, not just change what the header displays. Plus
   // the register's status column and the dashboard's status-based KPIs.
+  revalidatePath(`/shipments/${d.shipment_id}`, "layout");
+  revalidatePath("/shipments");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+const ConfirmCompletionSchema = z.object({
+  shipment_id: z.string().uuid(),
+  notes: z.string().trim().optional(),
+});
+
+/**
+ * confirm_shipment_completion is deliberately separate from
+ * change_shipment_status — status_transitions has no row targeting
+ * 'Completed' on purpose (see the comment in 20260101000003_reference_data.sql).
+ * This RPC existed and worked correctly since Module 2 but was never
+ * actually wired into the frontend at all — there was no button anywhere
+ * that called it, meaning no shipment could ever be marked Completed
+ * through the app. Same class of gap as verify_document before it.
+ */
+export async function confirmCompletionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = ConfirmCompletionSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    return { error: "Invalid request." };
+  }
+  const supabase = await createClient();
+  const d = parsed.data;
+  const { error } = await supabase.rpc("confirm_shipment_completion", {
+    p_shipment_id: d.shipment_id,
+    p_notes: d.notes || null,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
   revalidatePath(`/shipments/${d.shipment_id}`, "layout");
   revalidatePath("/shipments");
   revalidatePath("/dashboard");

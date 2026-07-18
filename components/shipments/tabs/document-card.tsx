@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Loader2 } from "lucide-react";
-import { getSignedDownloadUrlAction, registerUploadIntentAction, finalizeReplaceAction, archiveDocumentAction } from "@/lib/actions/documents";
+import { getSignedDownloadUrlAction, registerUploadIntentAction, finalizeReplaceAction, archiveDocumentAction, verifyDocumentAction } from "@/lib/actions/documents";
 import { getR2UploadUrlAction } from "@/lib/actions/r2-storage";
 import { formatDubaiDate } from "@/lib/dates";
 
@@ -15,6 +15,7 @@ async function sha256Hex(file: File): Promise<string> {
 export function DocumentCard({
   shipmentId,
   documentId,
+  documentVersionId,
   typeName,
   filename,
   versionNumber,
@@ -23,10 +24,12 @@ export function DocumentCard({
   uploadedByName,
   storagePath,
   canEdit,
+  canVerify,
   onChanged,
 }: {
   shipmentId: string;
   documentId: string;
+  documentVersionId: string;
   typeName: string;
   filename: string;
   versionNumber: number;
@@ -35,11 +38,13 @@ export function DocumentCard({
   uploadedByName: string;
   storagePath: string;
   canEdit: boolean;
+  canVerify: boolean;
   onChanged?: () => void;
 }) {
   const [previewing, setPreviewing] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +99,12 @@ export function DocumentCard({
     const reason = window.prompt("Reason for archiving this document:");
     if (!reason) return;
     setArchiving(true);
-    const result = await archiveDocumentAction(documentId, shipmentId, reason);
+    // Item (bug found while wiring Verify): this used to pass documentId
+    // here — archive_document's SQL signature expects the VERSION id
+    // (p_document_version_id), which is a different row entirely. Every
+    // Archive attempt was failing with NOT_FOUND before this fix, since
+    // no document_versions row has an id matching a documents.id.
+    const result = await archiveDocumentAction(documentVersionId, shipmentId, reason);
     setArchiving(false);
     if (result.error) {
       setError(result.error);
@@ -105,6 +115,28 @@ export function DocumentCard({
     }
   }
 
+  async function handleVerify(approve: boolean) {
+    let remarks: string | undefined;
+    if (!approve) {
+      const reason = window.prompt("Reason for rejecting this document:");
+      if (!reason) return;
+      remarks = reason;
+    }
+    setVerifying(true);
+    setError(null);
+    const result = await verifyDocumentAction(documentVersionId, shipmentId, approve, remarks);
+    setVerifying(false);
+    if (result.error) {
+      setError(result.error);
+    } else if (onChanged) {
+      onChanged();
+    } else {
+      window.location.reload();
+    }
+  }
+
+  const canDecide = canVerify && (status === "Uploaded");
+
   return (
     <div className="rounded-md border border-border p-3">
       <div className="text-[12.5px] font-semibold text-ink">{filename}</div>
@@ -113,7 +145,9 @@ export function DocumentCard({
         Uploaded {formatDubaiDate(uploadedAt)} by {uploadedByName}
       </div>
       <div className="mt-1.5">
-        <span className="text-[11px] font-bold text-primary-dark">{status}</span>
+        <span className={`text-[11px] font-bold ${status === "Rejected" ? "text-danger" : status === "Verified" ? "text-primary-dark" : "text-warning"}`}>
+          {status}
+        </span>
       </div>
       {error && <p className="mt-1.5 text-[11px] text-danger">{error}</p>}
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -124,6 +158,24 @@ export function DocumentCard({
         >
           {previewing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Preview"}
         </button>
+        {canDecide && (
+          <>
+            <button
+              onClick={() => handleVerify(true)}
+              disabled={verifying}
+              className="rounded-md border border-primary/40 bg-primary-light px-2.5 py-1 text-[11px] font-medium text-primary-dark transition hover:bg-primary-light/70 disabled:opacity-60"
+            >
+              {verifying ? "…" : "Verify"}
+            </button>
+            <button
+              onClick={() => handleVerify(false)}
+              disabled={verifying}
+              className="rounded-md border border-danger/40 bg-surface px-2.5 py-1 text-[11px] font-medium text-danger transition hover:bg-danger-light disabled:opacity-60"
+            >
+              {verifying ? "…" : "Reject"}
+            </button>
+          </>
+        )}
         {canEdit && (
           <>
             <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleReplaceFile(e.target.files[0])} />
