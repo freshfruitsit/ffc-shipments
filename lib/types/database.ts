@@ -349,7 +349,7 @@ export interface Database {
         Returns: { id: string; code: string | null; name: string }[];
       };
       search_shipments: {
-        Args: { p_query: string | null; p_status: OverallStatus | null; p_view: string | null; p_page: number; p_page_size: number };
+        Args: { p_query?: string | null; p_status?: OverallStatus | null; p_view?: string | null; p_page?: number; p_page_size?: number };
         Returns: {
           id: string; ref: string; supplier_name_snapshot: string; origin_country: string | null;
           awb: string | null; eta: string | null; port: string | null;

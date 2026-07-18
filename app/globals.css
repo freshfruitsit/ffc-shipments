@@ -26,6 +26,14 @@
 
   --background: var(--color-surface-muted);
   --foreground: var(--color-ink);
+
+  /* PWA-specific tokens (Field app) — additive only, the desktop app
+     never references these. Amber borrowed from aviation instrument-
+     panel warning lights, used specifically for "in progress" states;
+     the PWA's one deliberate departure from the desktop palette. */
+  --color-pwa-amber: #b8860b;
+  --color-pwa-amber-light: #faf1dd;
+  --color-pwa-bg: #f5f6f4;
 }
 
 @theme inline {
@@ -50,6 +58,11 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-pwa-amber: var(--color-pwa-amber);
+  --color-pwa-amber-light: var(--color-pwa-amber-light);
+  --color-pwa-bg: var(--color-pwa-bg);
 }
 
 body {
