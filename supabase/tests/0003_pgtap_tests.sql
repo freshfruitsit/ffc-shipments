@@ -1508,3 +1508,69 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- REGRESSION TEST — single-document upload model. Confirms the actual
+-- behavior change: a shipment in the "Fresh Fruits and Vegetables"
+-- category (which has 5 required_documents rows) now only needs ONE
+-- document verified to reach document_status = 'Verified' — the
+-- previous per-type-checklist logic would have required all 5.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_single as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories where name = 'Fresh Fruits and Vegetables' limit 1) as cat_id,
+  (select id from document_types where name = 'Shipment Documents' limit 1) as doc_type_id;
+grant select on t_fixture_single to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_single), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_single_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_single), (select branch_id from t_fixture_single),
+  null, 'Single Doc Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_single), 'REGRESSION-SINGLE-DOC-TEST', null
+);
+grant select on t_single_shipment to authenticated;
+
+select ok(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)) = 'Pending',
+  'a fresh shipment with zero documents uploaded starts at document_status = Pending'
+);
+
+create temp table t_single_doc as select gen_random_uuid() as doc_id;
+alter table t_single_doc add column test_path text;
+update t_single_doc set test_path = 'shipments/' || (select id::text from t_single_shipment) || '/' || doc_id::text || '/combined.pdf';
+grant select on t_single_doc to authenticated;
+
+select fn_register_upload_intent(
+  (select id from t_single_shipment), (select doc_id from t_single_doc), (select test_path from t_single_doc),
+  'application/pdf', 100, 'h'
+);
+create temp table t_single_version as
+select id from upload_document_metadata(
+  (select id from t_single_shipment), (select doc_id from t_single_doc), null, (select doc_type_id from t_fixture_single),
+  (select test_path from t_single_doc), 'combined.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_single_version to authenticated;
+
+select ok(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)) = 'Documents Pending',
+  'after ONE document is uploaded (not verified yet), document_status becomes Documents Pending — awaiting verification, not blocked on 4 other required types'
+);
+
+select verify_document((select id from t_single_version), true, null);
+
+select is(
+  (select document_status::text from shipments where id = (select id from t_single_shipment)), 'Verified',
+  'verifying that ONE document is sufficient to reach document_status = Verified — the old per-type checklist would have required 5'
+);
+reset role;
+
+select * from finish();
+rollback;
