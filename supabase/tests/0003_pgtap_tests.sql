@@ -1230,3 +1230,187 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- REGRESSION TEST — change_shipment_status. A real bug shipped across two
+-- migrations (20260101000011, 20260101000012) where this function checked
+-- for a permission literally called 'update_status', which was never
+-- created anywhere in this schema — meaning NO role, including
+-- system_administrator, could ever change a shipment's overall status at
+-- all. The bug went undetected because nothing in this suite exercised
+-- change_shipment_status directly. This block exists specifically so
+-- that gap can't happen silently again.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_status as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id;
+grant select on t_fixture_status to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_status_shipment as
+select id, ref from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_status), (select branch_id from t_fixture_status),
+  null, 'Regression Test Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_status), 'REGRESSION-STATUS-TEST', null
+);
+grant select on t_status_shipment to authenticated;
+reset role;
+
+-- The exact real-world scenario that was broken: a system_administrator
+-- (the highest-privilege role in the system) changing a fresh Draft
+-- shipment's status at all.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_status_result as
+select overall_status from change_shipment_status((select id from t_status_shipment), 'Documents Pending', null);
+reset role;
+
+select is(
+  (select overall_status::text from t_status_result), 'Documents Pending',
+  'system_administrator can successfully change overall_status — the bogus update_status permission check is gone'
+);
+
+-- The permission gate itself must still genuinely work — this isn't just
+-- "no permission check ever runs now instead."
+select ok(
+  (select count(*)::int from status_transitions where required_permission is not null and required_permission != '') > 0,
+  'status_transitions still has real per-transition required_permission values driving the actual gate'
+);
+
+-- A truly invalid transition (not just a permission issue) must still be
+-- rejected — confirms fn_lock_shipment_for_mutation's null-permission
+-- call didn't accidentally weaken the transition-validity check itself.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select throws_ok(
+  format($$ select change_shipment_status(%L, 'Completed', null) $$, (select id::text from t_status_shipment)),
+  '23514', null, 'jumping straight from Documents Pending to Completed is still correctly rejected as an invalid transition'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — verify_document / archive_document. Two more real
+-- bugs found while investigating why a shipment couldn't reach "Ready
+-- for Submission": verify_document's UPDATE used a CASE expression that
+-- Postgres didn't reliably cast to the doc_version_status enum, and the
+-- frontend was calling archive_document with a documents.id where a
+-- document_versions.id was required (a different row entirely) — every
+-- Archive attempt was failing with NOT_FOUND. Both were never caught
+-- because neither function had ever actually been called end-to-end
+-- before (verify_document wasn't wired into the UI at all; archive's
+-- bug was purely a frontend argument-passing mistake pgTAP wouldn't
+-- have caught unless it exercised the RPC directly, as it now does).
+-- ============================================================
+begin;
+select plan(4);
+
+create temp table t_fixture_verify as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id,
+  (select id from document_types limit 1) as doc_type_id;
+grant select on t_fixture_verify to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_verify_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
+  null, 'Verify Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST', null
+);
+grant select on t_verify_shipment to authenticated;
+
+create temp table t_verify_doc as
+select gen_random_uuid() as doc_id;
+alter table t_verify_doc add column test_path text;
+update t_verify_doc set test_path = 'shipments/' || (select id::text from t_verify_shipment) || '/' || doc_id::text || '/test.pdf';
+grant select on t_verify_doc to authenticated;
+
+select fn_register_upload_intent(
+  (select id from t_verify_shipment), (select doc_id from t_verify_doc), (select test_path from t_verify_doc),
+  'application/pdf', 100, 'h'
+);
+create temp table t_verify_version as
+select id from upload_document_metadata(
+  (select id from t_verify_shipment), (select doc_id from t_verify_doc), null, (select doc_type_id from t_fixture_verify),
+  (select test_path from t_verify_doc), 'test.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_verify_version to authenticated;
+reset role;
+
+-- verify_document (approve branch) — was failing with a type-cast error
+-- on every single call.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select is(
+  (select status::text from verify_document((select id from t_verify_version), true, null)),
+  'Verified', 'verify_document(approve=true) succeeds and correctly sets status to Verified'
+);
+reset role;
+
+-- verify_document (reject branch) — same CASE expression, other side.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_verify), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_verify_shipment2 as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
+  null, 'Verify Regression Co 2', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST-2', null
+);
+grant select on t_verify_shipment2 to authenticated;
+create temp table t_verify_doc2 as
+select gen_random_uuid() as doc_id;
+alter table t_verify_doc2 add column test_path text;
+update t_verify_doc2 set test_path = 'shipments/' || (select id::text from t_verify_shipment2) || '/' || doc_id::text || '/test2.pdf';
+grant select on t_verify_doc2 to authenticated;
+select fn_register_upload_intent(
+  (select id from t_verify_shipment2), (select doc_id from t_verify_doc2), (select test_path from t_verify_doc2),
+  'application/pdf', 100, 'h'
+);
+create temp table t_verify_version2 as
+select id from upload_document_metadata(
+  (select id from t_verify_shipment2), (select doc_id from t_verify_doc2), null, (select doc_type_id from t_fixture_verify),
+  (select test_path from t_verify_doc2), 'test2.pdf', 'application/pdf', 100, 'h'
+);
+grant select on t_verify_version2 to authenticated;
+select is(
+  (select status::text from verify_document((select id from t_verify_version2), false, 'test rejection')),
+  'Rejected', 'verify_document(approve=false) succeeds and correctly sets status to Rejected'
+);
+
+-- get_shipment_documents_tab returns a real, usable version id — the
+-- field that was missing entirely and is what archive/verify both need.
+select ok(
+  (select (get_shipment_documents_tab((select id from t_verify_shipment))->'documents'->0->'current_version'->>'id') is not null),
+  'get_shipment_documents_tab returns a non-null current_version.id'
+);
+
+-- archive_document — was failing with NOT_FOUND on every call because
+-- the frontend passed a documents.id where a document_versions.id was
+-- required. Calling it correctly (as this test now does, and as the
+-- fixed frontend now does) must actually succeed.
+select ok(
+  (select status::text from archive_document((select id from t_verify_version2), 'regression test archive')) = 'Archived',
+  'archive_document succeeds when called with the correct document_versions id'
+);
+reset role;
+
+select * from finish();
+rollback;

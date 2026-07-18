@@ -174,6 +174,18 @@ export async function finalizeReplaceAction(input: {
   return { success: true };
 }
 
+export async function verifyDocumentAction(documentVersionId: string, shipmentId: string, approve: boolean, remarks?: string): Promise<ActionState> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("verify_document", {
+    p_document_version_id: documentVersionId,
+    p_approve: approve,
+    p_remarks: remarks || null,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${shipmentId}/documents`);
+  return { success: true };
+}
+
 export async function archiveDocumentAction(documentVersionId: string, shipmentId: string, reason: string): Promise<ActionState> {
   if (!reason.trim()) {
     return { error: "A reason is required to archive a document." };

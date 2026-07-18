@@ -10,11 +10,12 @@ type DocumentsData = {
   documents: {
     document_id: string; document_type_name: string;
     current_version: {
-      version_number: number; status: string; storage_path: string; original_filename: string;
+      id: string; version_number: number; status: string; storage_path: string; original_filename: string;
       uploaded_at: string; uploaded_by_name: string | null;
     };
   }[];
   can_upload: boolean;
+  can_verify: boolean;
 };
 
 export function Step4Documents({
@@ -81,6 +82,7 @@ export function Step4Documents({
               key={doc.document_id}
               shipmentId={shipmentId}
               documentId={doc.document_id}
+              documentVersionId={doc.current_version.id}
               typeName={doc.document_type_name}
               filename={doc.current_version.original_filename}
               versionNumber={doc.current_version.version_number}
@@ -89,6 +91,7 @@ export function Step4Documents({
               uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
               storagePath={doc.current_version.storage_path}
               canEdit={tab.can_upload}
+              canVerify={tab.can_verify}
               onChanged={refresh}
             />
           ))}

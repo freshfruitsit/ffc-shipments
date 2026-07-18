@@ -8,7 +8,7 @@ type DocumentsData = {
   documents: {
     document_id: string; document_type_name: string; invoice_no: string | null; version_count: number;
     current_version: {
-      version_number: number; status: string; storage_path: string; original_filename: string;
+      id: string; version_number: number; status: string; storage_path: string; original_filename: string;
       uploaded_at: string; uploaded_by_name: string | null; verified_by_name: string | null; expiry_date: string | null;
     };
   }[];
@@ -44,6 +44,7 @@ export default async function DocumentsTab({ params }: { params: Promise<{ id: s
             key={doc.document_id}
             shipmentId={id}
             documentId={doc.document_id}
+            documentVersionId={doc.current_version.id}
             typeName={doc.document_type_name}
             filename={doc.current_version.original_filename}
             versionNumber={doc.current_version.version_number}
@@ -52,6 +53,7 @@ export default async function DocumentsTab({ params }: { params: Promise<{ id: s
             uploadedByName={doc.current_version.uploaded_by_name ?? "Unknown"}
             storagePath={doc.current_version.storage_path}
             canEdit={tab.can_upload}
+            canVerify={tab.can_verify}
           />
         ))}
       </div>
