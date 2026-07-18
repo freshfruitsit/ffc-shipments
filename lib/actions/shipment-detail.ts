@@ -169,6 +169,38 @@ export async function changeShipmentStatusAction(_prev: ActionState, formData: F
   return { success: true };
 }
 
+const ConfirmCompletionSchema = z.object({
+  shipment_id: z.string().uuid(),
+  notes: z.string().trim().optional(),
+});
+
+/**
+ * confirm_shipment_completion is deliberately separate from
+ * change_shipment_status — status_transitions has no row targeting
+ * 'Completed' on purpose (see the comment in 20260101000003_reference_data.sql).
+ * This RPC existed and worked correctly since Module 2 but was never
+ * actually wired into the frontend at all — there was no button anywhere
+ * that called it, meaning no shipment could ever be marked Completed
+ * through the app. Same class of gap as verify_document before it.
+ */
+export async function confirmCompletionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = ConfirmCompletionSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    return { error: "Invalid request." };
+  }
+  const supabase = await createClient();
+  const d = parsed.data;
+  const { error } = await supabase.rpc("confirm_shipment_completion", {
+    p_shipment_id: d.shipment_id,
+    p_notes: d.notes || null,
+  });
+  if (error) return { error: friendlyRpcError(error.message) };
+  revalidatePath(`/shipments/${d.shipment_id}`, "layout");
+  revalidatePath("/shipments");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 const CommentSchema = z.object({
   shipment_id: z.string().uuid(),
   body: z.string().trim().min(1, "Comment cannot be empty"),

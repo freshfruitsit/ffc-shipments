@@ -445,6 +445,10 @@ export interface Database {
         Args: { p_shipment_id: string; p_new_status: OverallStatus; p_reason?: string | null };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
+      confirm_shipment_completion: {
+        Args: { p_shipment_id: string; p_notes?: string | null };
+        Returns: Database["public"]["Tables"]["shipments"]["Row"];
+      };
       add_comment: {
         Args: { p_shipment_id: string; p_body: string };
         Returns: Database["public"]["Tables"]["shipment_comments"]["Row"];

@@ -1414,3 +1414,97 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- REGRESSION TEST — confirm_shipment_completion. This RPC, and the
+-- completion_eligible trigger behind it, were both already correct and
+-- working since Module 2 — but nothing in the frontend had ever called
+-- either, meaning no shipment could actually be marked Completed through
+-- the app at all (the same class of gap as verify_document). This test
+-- exercises the real end-to-end path: reject when not eligible, then
+-- genuinely drive a shipment through every subprocess to a real
+-- completion-eligible state and confirm the RPC succeeds.
+-- ============================================================
+begin;
+select plan(3);
+
+create temp table t_fixture_complete as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories where name = 'Fresh Fruits and Vegetables' limit 1) as cat_id;
+grant select on t_fixture_complete to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_complete), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_complete_shipment as
+select id, ref from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_complete), (select branch_id from t_fixture_complete),
+  null, 'Completion Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_complete), 'REGRESSION-COMPLETION-TEST', null
+);
+grant select on t_complete_shipment to authenticated;
+
+-- Fresh Draft shipment: not remotely eligible, and confirm_shipment_completion
+-- must reject it outright.
+select throws_ok(
+  format($$ select confirm_shipment_completion(%L, null) $$, (select id::text from t_complete_shipment)),
+  '23514', null, 'confirm_shipment_completion rejects a fresh Draft shipment as NOT_ELIGIBLE'
+);
+reset role;
+
+-- Drive every subprocess to a genuine terminal state (direct UPDATE as
+-- superuser here — the same pattern the rest of this suite already uses
+-- to set up preconditions the RPCs themselves don't expose a path to
+-- set directly; RLS correctly blocks this under the authenticated role,
+-- which is exactly why it's done here instead).
+update shipments set
+  customs_status = 'Approved', municipality_status = 'Finished',
+  delivery_order_status = 'Verified', mofaic_status = 'Not Applicable', physical_doc_status = 'Closed'
+where id = (select id from t_complete_shipment);
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_complete), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+
+-- Upload + verify all 5 required document types for this category.
+do $body$
+declare
+  v_sid uuid := (select id from t_complete_shipment);
+  v_type record;
+  v_doc_id uuid;
+  v_path text;
+  v_ver_id uuid;
+begin
+  for v_type in select id from document_types where name in ('Commercial Invoice','Packing List','Air Waybill','Certificate of Origin','Health Certificate') loop
+    v_doc_id := gen_random_uuid();
+    v_path := 'shipments/' || v_sid::text || '/' || v_doc_id::text || '/f.pdf';
+    perform fn_register_upload_intent(v_sid, v_doc_id, v_path, 'application/pdf', 100, 'h');
+    select id into v_ver_id from upload_document_metadata(v_sid, v_doc_id, null, v_type.id, v_path, 'f.pdf', 'application/pdf', 100, 'h');
+    perform verify_document(v_ver_id, true, null);
+  end loop;
+end $body$;
+
+-- Drive overall_status through the full real transition chain to Received.
+select change_shipment_status((select id from t_complete_shipment), 'Documents Pending', null);
+select change_shipment_status((select id from t_complete_shipment), 'Ready for Submission', null);
+select change_shipment_status((select id from t_complete_shipment), 'Submitted', null);
+select change_shipment_status((select id from t_complete_shipment), 'Customs Processing', null);
+select change_shipment_status((select id from t_complete_shipment), 'Clearance Pending', null);
+select change_shipment_status((select id from t_complete_shipment), 'Ready for Collection', null);
+select change_shipment_status((select id from t_complete_shipment), 'Received', null);
+
+select ok(
+  (select completion_eligible from shipments where id = (select id from t_complete_shipment)),
+  'completion_eligible correctly becomes true once every subprocess reaches a terminal state at Received'
+);
+
+select is(
+  (select overall_status::text from confirm_shipment_completion((select id from t_complete_shipment), 'regression test')),
+  'Completed', 'confirm_shipment_completion succeeds and sets overall_status to Completed once genuinely eligible'
+);
+reset role;
+
+select * from finish();
+rollback;

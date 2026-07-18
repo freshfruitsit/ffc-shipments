@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useActionState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { assignShipmentAction, changeShipmentStatusAction, type ActionState } from "@/lib/actions/shipment-detail";
+import { assignShipmentAction, changeShipmentStatusAction, confirmCompletionAction, type ActionState } from "@/lib/actions/shipment-detail";
 
 type Profile = { id: string; full_name: string };
 type Transition = { to_status: string; requires_reason: boolean };
@@ -14,13 +14,15 @@ const initialState: ActionState = {};
 export function ShipmentActionBar({
   shipmentId,
   validTransitions,
+  completionEligible,
   permissions,
 }: {
   shipmentId: string;
   validTransitions: Transition[];
-  permissions: { assign: boolean; changeStatus: boolean; raiseException: boolean; edit: boolean };
+  completionEligible: boolean;
+  permissions: { assign: boolean; changeStatus: boolean; raiseException: boolean; edit: boolean; closeReopen: boolean };
 }) {
-  const [openPanel, setOpenPanel] = useState<"assign" | "status" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"assign" | "status" | "complete" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +51,19 @@ export function ShipmentActionBar({
           )}
         </div>
       )}
+      {permissions.closeReopen && (
+        <div className="relative">
+          <ActionButton
+            label="Complete Shipment"
+            onClick={() => setOpenPanel(openPanel === "complete" ? null : "complete")}
+            disabled={!completionEligible}
+            title={completionEligible ? undefined : "Not yet eligible — every subprocess (Documents, Customs, Municipality, Delivery Order, MOFAIC, Physical Documents) must reach its final state, with no open Critical/High exceptions or pending resubmissions."}
+          />
+          {openPanel === "complete" && (
+            <CompleteShipmentPanel shipmentId={shipmentId} onDone={() => setOpenPanel(null)} />
+          )}
+        </div>
+      )}
       <Link href={`/shipments/${shipmentId}/comments`}>
         <ActionButtonLink label="Add Comment" />
       </Link>
@@ -69,11 +84,13 @@ export function ShipmentActionBar({
   );
 }
 
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+function ActionButton({ label, onClick, disabled, title }: { label: string; onClick: () => void; disabled?: boolean; title?: string }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[11.5px] font-semibold text-ink transition hover:bg-surface-muted"
+      disabled={disabled}
+      title={title}
+      className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[11.5px] font-semibold text-ink transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
     >
       {label}
     </button>
@@ -215,6 +232,45 @@ function ChangeStatusPanel({
           className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
         >
           {pending ? "Saving…" : "Change status"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function CompleteShipmentPanel({
+  shipmentId,
+  onDone,
+}: {
+  shipmentId: string;
+  onDone: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(confirmCompletionAction, initialState);
+
+  useEffect(() => {
+    if (state.success) onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.success]);
+
+  return (
+    <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-border bg-surface p-4 shadow-lg">
+      <form action={formAction} className="space-y-3">
+        <input type="hidden" name="shipment_id" value={shipmentId} />
+        <p className="text-xs text-ink-muted">
+          This marks the shipment as fully Completed — a final state. Confirm every subprocess is genuinely
+          finished before proceeding.
+        </p>
+        {state.error && <p className="text-xs text-danger">{state.error}</p>}
+        <div>
+          <label className="text-xs font-medium text-ink-muted">Notes (optional)</label>
+          <textarea name="notes" rows={2} className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm" />
+        </div>
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+        >
+          {pending ? "Completing…" : "Confirm Completion"}
         </button>
       </form>
     </div>
