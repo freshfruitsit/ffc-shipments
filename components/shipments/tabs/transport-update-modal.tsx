@@ -8,10 +8,14 @@ import { Field, FormError, inputClass, selectClass } from "@/components/ui/form"
 
 type Option = { id: string; name: string };
 type Shipment = {
-  awb: string | null; airline_id: string | null; flight: string | null; eta: string | null;
+  awb: string | null; airline_id: string | null; flight: string | null;
+  flight_status: string; transit_airport: string | null;
+  eta: string | null;
   port_id: string | null; freight_agent_id: string | null; clearing_agent_id: string | null;
   packages: number | null; net_weight: number | null; gross_weight: number | null; transport_remarks: string | null;
 };
+
+const FLIGHT_STATUSES = ["Booked", "Manifested", "Departed", "Delayed", "In Transit", "Cancelled"];
 
 const initialState: ActionState = {};
 
@@ -38,6 +42,7 @@ export function TransportUpdateModal({
   clearingAgents: Option[];
 }) {
   const [open, setOpen] = useState(false);
+  const [flightStatus, setFlightStatus] = useState(shipment.flight_status);
   const [state, formAction, pending] = useActionState(updateTransportAction, initialState);
 
   useCloseModalOnSuccess(state.success, setOpen);
@@ -90,6 +95,30 @@ export function TransportUpdateModal({
               <Field label="ETA">
                 <input type="datetime-local" name="eta" defaultValue={toDatetimeLocal(shipment.eta)} className={inputClass} />
               </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Flight Status">
+                <select
+                  name="flight_status"
+                  value={flightStatus}
+                  onChange={(e) => setFlightStatus(e.target.value)}
+                  className={selectClass}
+                >
+                  {FLIGHT_STATUSES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </Field>
+              {flightStatus === "In Transit" && (
+                <Field label="Transit Airport" error={state.fieldErrors?.transit_airport}>
+                  <input
+                    name="transit_airport"
+                    placeholder="e.g. Doha (DOH)"
+                    defaultValue={shipment.transit_airport ?? ""}
+                    className={inputClass}
+                  />
+                </Field>
+              )}
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Arrival Port">

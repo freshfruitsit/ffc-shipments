@@ -5,7 +5,7 @@ import { updateDeliveryOrderAction, updateMofaicAction } from "@/lib/actions/por
 
 type Option = { id: string; name: string };
 
-const DO_STATUSES = ["Not Required", "Pending", "Requested", "Received", "Uploaded", "Verified"];
+const DO_STATUSES = ["Not Required", "Pending", "Requested", "Received from Carrier", "Uploaded", "Verified"];
 const MOFAIC_STATUSES = ["Not Applicable", "Applicability Review", "Pending", "Payment Due", "Paid", "Overdue", "Completed", "Exception"];
 
 export function Step6DeliveryMofaic({
@@ -46,7 +46,7 @@ export function Step6DeliveryMofaic({
 
   function handleDoStatusChange(value: string) {
     setDoStatus(value);
-    if (value === "Received" && !doReceivedDate) {
+    if (value === "Received from Carrier" && !doReceivedDate) {
       setDoReceivedDate(new Date().toISOString().slice(0, 10));
     }
   }

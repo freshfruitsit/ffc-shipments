@@ -7,6 +7,7 @@ import { formatDubaiDateTime } from "@/lib/dates";
 
 type TransportData = {
   ref: string; awb: string | null; airline_id: string | null; airline_name: string | null; flight: string | null;
+  flight_status: string; transit_airport: string | null;
   eta: string | null; port_id: string | null; port_name: string | null;
   freight_agent_id: string | null; freight_agent_name: string | null;
   clearing_agent_id: string | null; clearing_agent_name: string | null;
@@ -35,6 +36,10 @@ export default async function TransportTab({ params }: { params: Promise<{ id: s
         <InfoItem label="AWB Number">{shipment.awb ?? "—"}</InfoItem>
         <InfoItem label="Airline">{shipment.airline_name ?? "—"}</InfoItem>
         <InfoItem label="Flight Number">{shipment.flight ?? "—"}</InfoItem>
+        <InfoItem label="Flight Status">{shipment.flight_status}</InfoItem>
+        {shipment.flight_status === "In Transit" && (
+          <InfoItem label="Transit Airport">{shipment.transit_airport ?? "—"}</InfoItem>
+        )}
         <InfoItem label="ETA">{shipment.eta ? formatDubaiDateTime(shipment.eta) : "—"}</InfoItem>
         <InfoItem label="Arrival Port">{shipment.port_name ?? "—"}</InfoItem>
         <InfoItem label="Packages">{shipment.packages ?? "—"}</InfoItem>

@@ -1574,3 +1574,63 @@ reset role;
 
 select * from finish();
 rollback;
+
+-- ============================================================
+-- REGRESSION TEST — flight status tracking + Delivery Order rename
+-- (Air Shipment team's requests from a real stakeholder meeting).
+-- ============================================================
+begin;
+select plan(5);
+
+create temp table t_fixture_flight as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id;
+grant select on t_fixture_flight to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_flight), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_flight_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_flight), (select branch_id from t_fixture_flight),
+  null, 'Flight Regression Co', (select id from countries limit 1), 'Medium',
+  (select admin_id from t_fixture_flight), 'REGRESSION-FLIGHT-TEST', null
+);
+grant select on t_flight_shipment to authenticated;
+
+select is(
+  (select flight_status::text from shipments where id = (select id from t_flight_shipment)),
+  'Booked', 'a fresh shipment defaults to flight_status = Booked'
+);
+
+select throws_ok(
+  format($$ select update_shipment_transport(%L, null, null, 'EK123', null, null, null, null, null, null, null, null, 'In Transit', null) $$, (select id::text from t_flight_shipment)),
+  '23514', null, 'setting flight_status to In Transit without a transit_airport is rejected'
+);
+
+select ok(
+  (select transit_airport = 'Doha (DOH)' from update_shipment_transport(
+    (select id from t_flight_shipment), null, null, 'EK123', null, null, null, null, null, null, null, null, 'In Transit', 'Doha (DOH)'
+  )),
+  'setting flight_status to In Transit WITH a transit_airport succeeds and stores it'
+);
+
+select ok(
+  (select transit_airport is null from update_shipment_transport(
+    (select id from t_flight_shipment), null, null, 'EK123', null, null, null, null, null, null, null, null, 'Departed', null
+  )),
+  'moving flight_status away from In Transit clears the stale transit_airport automatically'
+);
+
+select is(
+  (select delivery_order_status::text from update_delivery_order(
+    (select id from t_flight_shipment), null, 'Received from Carrier', null, null, false, null, null
+  )),
+  'Received from Carrier', 'delivery_order_status can be set to the renamed value Received from Carrier'
+);
+reset role;
+
+select * from finish();
+rollback;

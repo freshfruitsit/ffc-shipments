@@ -13,6 +13,8 @@ const TransportSchema = z.object({
   awb: z.string().trim().optional(),
   airline_id: z.string().uuid().optional().or(z.literal("")),
   flight: z.string().trim().optional(),
+  flight_status: z.enum(["Booked", "Manifested", "Departed", "Delayed", "In Transit", "Cancelled"]).default("Booked"),
+  transit_airport: z.string().trim().optional(),
   eta: z.string().optional(),
   port_id: z.string().uuid().optional().or(z.literal("")),
   freight_agent_id: z.string().uuid().optional().or(z.literal("")),
@@ -21,6 +23,9 @@ const TransportSchema = z.object({
   net_weight: z.coerce.number().optional(),
   gross_weight: z.coerce.number().optional(),
   transport_remarks: z.string().trim().optional(),
+}).refine((d) => d.flight_status !== "In Transit" || !!d.transit_airport, {
+  message: "Transit airport is required when flight status is In Transit",
+  path: ["transit_airport"],
 });
 
 export async function updateTransportAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -47,6 +52,8 @@ export async function updateTransportAction(_prev: ActionState, formData: FormDa
     p_net_weight: d.net_weight ?? null,
     p_gross_weight: d.gross_weight ?? null,
     p_transport_remarks: d.transport_remarks || null,
+    p_flight_status: d.flight_status,
+    p_transit_airport: d.transit_airport || null,
   });
   if (error) return { error: friendlyRpcError(error.message) };
   // Item 9 (performance): targets this specific tab's own path, not the
