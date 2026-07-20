@@ -9,7 +9,6 @@ import "@fontsource/space-grotesk/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./globals.css";
-import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 
 export const metadata: Metadata = {
   title: "FFC Shipments",
@@ -42,7 +41,6 @@ export default function RootLayout({
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full">
         {children}
-        <ServiceWorkerRegistration />
       </body>
     </html>
   );

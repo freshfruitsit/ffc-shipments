@@ -58,14 +58,25 @@ describe("CreateShipmentSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("allows category_id/origin_country_id/supplier_id to be omitted (empty string)", () => {
+  it("allows category_id/origin_country_id to be omitted (empty string)", () => {
     const result = CreateShipmentSchema.safeParse({
       ...validShipment,
       category_id: "",
       origin_country_id: "",
-      supplier_id: "",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty supplier_id — a real, valid supplier is required unconditionally now", () => {
+    const result = CreateShipmentSchema.safeParse({ ...validShipment, supplier_id: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a missing supplier_id entirely", () => {
+    const { supplier_id: _s, ...rest } = validShipment;
+    void _s;
+    const result = CreateShipmentSchema.safeParse(rest);
+    expect(result.success).toBe(false);
   });
 });
 

@@ -28,10 +28,6 @@ export async function createShipmentAction(
     return { fieldErrors };
   }
 
-  if (!parsed.data.supplier_id && !parsed.data.supplier_name) {
-    return { fieldErrors: { supplier_id: "Select a supplier, or use \"Supplier not listed\" below" } };
-  }
-
   const supabase = await createClient();
 
   const {
@@ -47,8 +43,8 @@ export async function createShipmentAction(
     p_shipment_date: parsed.data.shipment_date,
     p_category_id: parsed.data.category_id || null,
     p_branch_id: parsed.data.branch_id,
-    p_supplier_id: parsed.data.supplier_id || null,
-    p_supplier_name: parsed.data.supplier_name || "",
+    p_supplier_id: parsed.data.supplier_id,
+    p_supplier_name: null,
     p_origin_country_id: parsed.data.origin_country_id || null,
     p_priority: parsed.data.priority || null,
     p_responsible: parsed.data.responsible,

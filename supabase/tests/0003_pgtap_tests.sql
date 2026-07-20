@@ -627,7 +627,7 @@ select throws_ok(
 );
 create temp table t_critical_shipment as
 select priority from create_shipment(
-  'Air', current_date, null, (select dxb_branch from t_fixture3), null, 'Test Co Critical', null,
+  'Air', current_date, null, (select dxb_branch from t_fixture3), (select id from suppliers where is_active limit 1), 'Test Co Critical', null,
   'Critical', (select dxb_data_entry from t_fixture3), null, null
 );
 reset role;
@@ -636,11 +636,18 @@ select is((select priority from t_critical_shipment), 'Critical', 'create_shipme
 set role authenticated;
 select set_config('app.current_user_id', (select dxb_data_entry::text from t_fixture3), false);
 select set_config('app.current_role_claim', 'authenticated', false);
+-- This test used to check that a blank/whitespace-only p_supplier_name
+-- was rejected. That whole code path is gone now — create_shipment no
+-- longer looks at p_supplier_name at all when p_supplier_id is null, it
+-- rejects immediately (see 20260101000024_hardening_batch_1.sql). Same
+-- errcode either way, but the test now verifies what's actually true:
+-- a null supplier_id alone is rejected, regardless of what name (if any)
+-- accompanies it.
 select throws_ok(
   format(
     $$ select create_shipment('Air', current_date, null, %L, null, '   ', null, 'Medium', %L, null, null) $$,
     (select dxb_branch::text from t_fixture3), (select dxb_data_entry::text from t_fixture3)
-  ), '23502', null, 'create_shipment rejects a blank (whitespace-only) supplier name'
+  ), '23502', null, 'create_shipment rejects a null supplier_id outright, regardless of any accompanying free-text name'
 );
 reset role;
 
@@ -708,7 +715,7 @@ set role authenticated;
 select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture4), false);
 select set_config('app.current_role_claim', 'authenticated', false);
 select id as t4_ship_id from create_shipment(
-  'Air', current_date, null, (select dxb_branch from t_fixture4), null,
+  'Air', current_date, null, (select dxb_branch from t_fixture4), (select id from suppliers where is_active limit 1),
   'Performance Test Supplier Co', null, 'Medium',
   (select dxb_supervisor from t_fixture4), null, null
 ) \gset
@@ -861,7 +868,7 @@ set role authenticated;
 select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture5), false);
 select set_config('app.current_role_claim', 'authenticated', false);
 select id as t5_ship_id from create_shipment(
-  'Air', current_date, null, (select dxb_branch from t_fixture5), null,
+  'Air', current_date, null, (select dxb_branch from t_fixture5), (select id from suppliers where is_active limit 1),
   'Tab RPC Test Supplier', null, 'Medium', (select dxb_supervisor from t_fixture5), null, null
 ) \gset
 
@@ -1257,7 +1264,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_status_shipment as
 select id, ref from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_status), (select branch_id from t_fixture_status),
-  null, 'Regression Test Co', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Regression Test Co', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_status), 'REGRESSION-STATUS-TEST', null
 );
 grant select on t_status_shipment to authenticated;
@@ -1330,7 +1337,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_verify_shipment as
 select id from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
-  null, 'Verify Regression Co', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Verify Regression Co', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST', null
 );
 grant select on t_verify_shipment to authenticated;
@@ -1371,7 +1378,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_verify_shipment2 as
 select id from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_verify), (select branch_id from t_fixture_verify),
-  null, 'Verify Regression Co 2', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Verify Regression Co 2', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_verify), 'REGRESSION-VERIFY-TEST-2', null
 );
 grant select on t_verify_shipment2 to authenticated;
@@ -1441,7 +1448,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_complete_shipment as
 select id, ref from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_complete), (select branch_id from t_fixture_complete),
-  null, 'Completion Regression Co', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Completion Regression Co', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_complete), 'REGRESSION-COMPLETION-TEST', null
 );
 grant select on t_complete_shipment to authenticated;
@@ -1533,7 +1540,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_single_shipment as
 select id from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_single), (select branch_id from t_fixture_single),
-  null, 'Single Doc Regression Co', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Single Doc Regression Co', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_single), 'REGRESSION-SINGLE-DOC-TEST', null
 );
 grant select on t_single_shipment to authenticated;
@@ -1595,7 +1602,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 create temp table t_flight_shipment as
 select id from create_shipment(
   'Air', current_date, (select cat_id from t_fixture_flight), (select branch_id from t_fixture_flight),
-  null, 'Flight Regression Co', (select id from countries limit 1), 'Medium',
+  (select id from suppliers where is_active limit 1), 'Flight Regression Co', (select id from countries limit 1), 'Medium',
   (select admin_id from t_fixture_flight), 'REGRESSION-FLIGHT-TEST', null
 );
 grant select on t_flight_shipment to authenticated;
@@ -1629,6 +1636,97 @@ select is(
     (select id from t_flight_shipment), null, 'Received from Carrier', null, null, false, null, null
   )),
   'Received from Carrier', 'delivery_order_status can be set to the renamed value Received from Carrier'
+);
+reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — hardening batch 1: consolidated New Shipment
+-- profile lists, required supplier_id, and the fixed Activity limit.
+-- ============================================================
+begin;
+select plan(7);
+
+create temp table t_fixture_hardening as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id,
+  (select id from suppliers where is_active limit 1) as supplier_id;
+grant select on t_fixture_hardening to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_hardening), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+
+-- Item 2: get_new_shipment_form_context now includes the 4 assignable-
+-- profile lists that New Shipment previously fetched via 4 separate
+-- get_assignable_profiles calls.
+select ok(
+  (select get_new_shipment_form_context() ? 'general_profiles'),
+  'get_new_shipment_form_context includes general_profiles'
+);
+select ok(
+  (select get_new_shipment_form_context() ? 'delivery_order_profiles'),
+  'get_new_shipment_form_context includes delivery_order_profiles'
+);
+select ok(
+  (select get_new_shipment_form_context() ? 'mofaic_profiles'),
+  'get_new_shipment_form_context includes mofaic_profiles'
+);
+select ok(
+  (select get_new_shipment_form_context() ? 'physical_docs_profiles'),
+  'get_new_shipment_form_context includes physical_docs_profiles'
+);
+
+-- Item 3: create_shipment now genuinely requires a real supplier_id —
+-- the old free-text fallback is gone entirely, not just the canonical-
+-- name-spoofing case fixed earlier.
+select throws_ok(
+  $$ select create_shipment('Air', current_date, null, (select branch_id from t_fixture_hardening),
+       null, 'Any Made Up Name At All', null, 'Medium', (select admin_id from t_fixture_hardening), null, null) $$,
+  '23502', null, 'create_shipment rejects p_supplier_id = null unconditionally now, regardless of any accompanying name'
+);
+select ok(
+  (select supplier_id is not null from create_shipment(
+    'Air', current_date, (select cat_id from t_fixture_hardening), (select branch_id from t_fixture_hardening),
+    (select supplier_id from t_fixture_hardening), null, null, 'Medium', (select admin_id from t_fixture_hardening), null, null
+  )),
+  'create_shipment still succeeds normally with a real, valid supplier_id'
+);
+reset role;
+
+-- Item 8: Activity's limit actually works now. Create the shipment first
+-- to get its real, auto-generated ref (p_internal_ref is a different
+-- field entirely, not what audit_log.shipment_ref needs to match), then
+-- insert 105 audit_log rows directly against that real ref — bypassing
+-- the normal RPC path is the correct way to set up a volume precondition
+-- no single legitimate action produces — and confirm the returned array
+-- is capped at 100, not 105.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_hardening), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_activity_shipment as
+select id, ref from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_hardening), (select branch_id from t_fixture_hardening),
+  (select supplier_id from t_fixture_hardening), null, null, 'Medium', (select admin_id from t_fixture_hardening), null, null
+);
+grant select on t_activity_shipment to authenticated;
+reset role;
+
+insert into audit_log (shipment_ref, actor, actor_role, action, module, occurred_at)
+select (select ref from t_activity_shipment), (select admin_id from t_fixture_hardening), 'system_administrator',
+  'Test event ' || gs, 'Overview', now() - (gs || ' minutes')::interval
+from generate_series(1, 105) gs;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_hardening), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select ok(
+  (select jsonb_array_length(get_shipment_activity_tab((select id from t_activity_shipment))->'events') <= 100),
+  'get_shipment_activity_tab genuinely caps at 100 events now — the old limit was written after jsonb_agg() and did nothing at all'
 );
 reset role;
 
