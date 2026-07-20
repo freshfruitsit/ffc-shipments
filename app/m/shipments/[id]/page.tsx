@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlightPathVisual } from "@/components/pwa/flight-path-visual";
 import { StatusDetailClient } from "@/components/pwa/status-detail-client";
+import { LiveFlightStatusCheck } from "@/components/shared/live-flight-status-check";
 import { STATUS_SEVERITY } from "@/lib/prototype-constants";
 import { formatDubaiDate } from "@/lib/dates";
 
@@ -72,6 +73,10 @@ export default async function MobileShipmentDetail({ params }: { params: Promise
         <InfoTile label="Port" plain>{header.port_name ?? "—"}</InfoTile>
         <InfoTile label="AWB / Flight" plain>{[header.awb, header.flight].filter(Boolean).join(" / ") || "—"}</InfoTile>
         <InfoTile label="Responsible" plain>{header.responsible_name ?? "Unassigned"}</InfoTile>
+      </div>
+
+      <div className="mt-4">
+        <LiveFlightStatusCheck shipmentId={id} flightNumber={header.flight} />
       </div>
 
       <h2 className="mb-2 mt-5 font-display text-[13px] font-semibold text-ink">Module Status</h2>

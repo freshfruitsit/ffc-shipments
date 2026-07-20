@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InfoGrid, InfoItem, TabCard } from "@/components/ui/form";
 import { TransportUpdateModal } from "@/components/shipments/tabs/transport-update-modal";
+import { LiveFlightStatusCheck } from "@/components/shared/live-flight-status-check";
 import { getAirlines, getPorts, getFreightAgents, getClearingAgents } from "@/lib/data/master-data";
 import { formatDubaiDateTime } from "@/lib/dates";
 
@@ -50,6 +51,10 @@ export default async function TransportTab({ params }: { params: Promise<{ id: s
 
       <h4 className="mt-3.5 text-[12.5px] text-ink-muted">Transport Remarks</h4>
       <p className="text-[12.5px] text-ink">{shipment.transport_remarks || "—"}</p>
+
+      <div className="mt-4">
+        <LiveFlightStatusCheck shipmentId={id} flightNumber={shipment.flight} />
+      </div>
 
       <div className="mt-4">
         {shipment.can_edit ? (

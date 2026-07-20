@@ -82,9 +82,16 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Run on everything except static assets and image optimization files,
-     * so the session gets refreshed on every real navigation.
+     * Run on everything except static assets, image optimization files,
+     * and the PWA's own manifest/service worker — those two specifically
+     * were being caught by this matcher before (neither .json nor .js
+     * was in the exclusion list), meaning an unauthenticated request for
+     * /manifest.json or /sw.js got redirected to /login's HTML instead of
+     * served directly — the browser then tried to parse that HTML as
+     * JSON/JS and failed immediately. Both must always be reachable
+     * regardless of session state, the same as every other static asset
+     * already excluded here.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
