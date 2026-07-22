@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, FormError, inputClass, selectClass } from "@/components/ui/form";
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
-const STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Under Review", "Finished", "Rejected", "Resubmission Required"];
+const STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Finished"];
 const initialState: ActionState = {};
 
 export function MunicipalityUpdateModal({

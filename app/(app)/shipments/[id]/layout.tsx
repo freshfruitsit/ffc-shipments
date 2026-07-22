@@ -11,13 +11,12 @@ type HeaderContext = {
   id: string; ref: string; mode: string; overall_status: string; priority: string;
   supplier_name_snapshot: string; eta: string | null; awb: string | null; flight: string | null;
   physical_doc_status: string; document_status: string; customs_status: string;
-  municipality_status: string; delivery_order_status: string;
+  municipality_status: string; delivery_order_status: string; mofaic_status: string;
   created_at: string; updated_at: string; completion_eligible: boolean;
   port_name: string | null; responsible_name: string | null;
   invoice_totals: Record<string, number>;
-  valid_status_transitions: { to_status: string; requires_reason: boolean }[];
   open_exception_count: number;
-  permissions: { assign: boolean; approve_status_change: boolean; manage_exceptions: boolean; edit_basic: boolean; close_reopen: boolean };
+  permissions: { assign: boolean; manage_exceptions: boolean; edit_basic: boolean };
 };
 
 export default async function ShipmentDetailLayout({
@@ -65,20 +64,10 @@ export default async function ShipmentDetailLayout({
           </div>
           <ShipmentActionBar
             shipmentId={id}
-            validTransitions={shipment.valid_status_transitions}
-            completionEligible={shipment.completion_eligible}
             permissions={{
               assign: shipment.permissions.assign,
-              // Was gated on approve_status_change alone, which hid the
-              // button for any role whose valid transitions all require a
-              // different permission (edit_basic, edit_customs, etc.) —
-              // valid_status_transitions is now correctly filtered
-              // server-side to just what THIS user can actually do, so
-              // "any transitions available at all" is the right check.
-              changeStatus: shipment.valid_status_transitions.length > 0,
               raiseException: shipment.permissions.manage_exceptions,
               edit: shipment.permissions.edit_basic,
-              closeReopen: shipment.permissions.close_reopen,
             }}
           />
         </div>
@@ -100,6 +89,7 @@ export default async function ShipmentDetailLayout({
           customsStatus={shipment.customs_status}
           municipalityStatus={shipment.municipality_status}
           deliveryOrderStatus={shipment.delivery_order_status}
+          mofaicStatus={shipment.mofaic_status}
           physicalDocStatus={shipment.physical_doc_status}
           createdAt={shipment.created_at}
         />

@@ -21,19 +21,14 @@ export type AppRole =
   | "system_administrator";
 
 export type OverallStatus =
-  | "Draft"
-  | "Documents Pending"
-  | "Ready for Submission"
-  | "Submitted"
-  | "Customs Processing"
-  | "Clearance Pending"
-  | "Ready for Collection"
-  | "Received"
-  | "Completed"
-  | "On Hold"
-  | "Rejected"
-  | "Resubmission Required"
-  | "Cancelled";
+  | "Created"
+  | "Dubai Customs"
+  | "Delivery Order Received"
+  | "Dubai Municipality"
+  | "Documents at FFC HO"
+  | "MOFAIC Completed"
+  | "Physical Documents Dispatched"
+  | "Completed";
 
 export type DocumentStatus =
   | "Pending"
@@ -47,24 +42,15 @@ export type DocumentStatus =
 export type CustomsStatus =
   | "Pending"
   | "Draft"
-  | "Request Created"
   | "Submitted"
-  | "Declaration Created"
-  | "Under Review"
-  | "Approved"
-  | "Rejected"
-  | "Resubmission Required"
-  | "Closed";
+  | "Finished";
 
 export type MunicipalityStatus =
   | "Not Required"
   | "Pending"
   | "Draft"
   | "Submitted"
-  | "Under Review"
-  | "Finished"
-  | "Rejected"
-  | "Resubmission Required";
+  | "Finished";
 
 export type DeliveryOrderStatus =
   | "Not Required"
@@ -450,14 +436,8 @@ export interface Database {
         Args: { p_shipment_id: string; p_responsible: string | null; p_coordinator: string | null };
         Returns: Database["public"]["Tables"]["shipments"]["Row"];
       };
-      change_shipment_status: {
-        Args: { p_shipment_id: string; p_new_status: OverallStatus; p_reason?: string | null };
-        Returns: Database["public"]["Tables"]["shipments"]["Row"];
-      };
-      confirm_shipment_completion: {
-        Args: { p_shipment_id: string; p_notes?: string | null };
-        Returns: Database["public"]["Tables"]["shipments"]["Row"];
-      };
+      // change_shipment_status and confirm_shipment_completion removed
+      // entirely — overall_status is now fully automatic.
       add_comment: {
         Args: { p_shipment_id: string; p_body: string };
         Returns: Database["public"]["Tables"]["shipment_comments"]["Row"];

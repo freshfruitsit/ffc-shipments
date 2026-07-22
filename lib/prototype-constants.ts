@@ -10,12 +10,12 @@ export const STATUS_SEVERITY = {
     warn: ["Documents Pending", "Partially Complete", "Under Verification", "Pending"],
   },
   customs: {
-    critical: ["Rejected"],
-    warn: ["Draft", "Request Created", "Submitted", "Declaration Created", "Under Review", "Resubmission Required", "Pending"],
+    critical: [],
+    warn: ["Draft", "Submitted", "Pending"],
   },
   municipality: {
-    critical: ["Rejected"],
-    warn: ["Draft", "Submitted", "Under Review", "Resubmission Required", "Pending"],
+    critical: [],
+    warn: ["Draft", "Submitted", "Pending"],
   },
   deliveryOrder: {
     critical: [] as string[],
@@ -33,34 +33,22 @@ export const STATUS_SEVERITY = {
 
 /** The 8-stage overall lifecycle flow used by the shipment detail progress stepper. */
 export const OVERALL_STAGE_FLOW = [
-  "Created", "Documents Ready", "Submitted", "Customs Processing",
-  "Clearance Completed", "Shipment Received", "Documents Closed", "Completed",
+  "Created", "Dubai Customs", "Delivery Order Received", "Dubai Municipality",
+  "Documents at FFC HO", "MOFAIC Completed", "Physical Documents Dispatched", "Completed",
 ] as const;
 
 /**
- * Maps a real overall_status enum value to a stepper stage index (0-7).
- * Exact port of overallStageIndex() from the prototype, adapted to this
- * schema's actual overall_status values.
+ * Maps overall_status to its stepper stage index (0-7). Much simpler
+ * than before this project's automatic-status-progression redesign —
+ * overall_status is now itself always exactly one of these 8 stage
+ * names (see fn_recalculate_shipment_progress in
+ * 20260101000025_auto_status_progression.sql), so this is a direct
+ * lookup rather than an indirect mapping from a much larger, separately-
+ * named enum.
  */
-export function overallStageIndex(overallStatus: string, physicalDocStatus?: string): number {
-  const map: Record<string, number> = {
-    Draft: 0,
-    "Documents Pending": 0,
-    "Ready for Submission": 1,
-    Submitted: 2,
-    "Customs Processing": 3,
-    "On Hold": 3,
-    "Clearance Pending": 4,
-    "Ready for Collection": 4,
-    Received: 5,
-    Rejected: 3,
-    "Resubmission Required": 3,
-    Cancelled: 0,
-    Completed: 7,
-  };
-  let idx = map[overallStatus] ?? 2;
-  if (idx === 5 && physicalDocStatus === "Closed") idx = 6;
-  return idx;
+export function overallStageIndex(overallStatus: string): number {
+  const idx = OVERALL_STAGE_FLOW.indexOf(overallStatus as (typeof OVERALL_STAGE_FLOW)[number]);
+  return idx === -1 ? 0 : idx;
 }
 
 /** The 12-tab order from the prototype's DETAIL_TABS array — exact order matters. */

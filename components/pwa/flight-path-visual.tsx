@@ -12,12 +12,10 @@ import { OVERALL_STAGE_FLOW, overallStageIndex } from "@/lib/prototype-constants
  */
 export function FlightPathVisual({
   overallStatus,
-  physicalDocStatus,
 }: {
   overallStatus: string;
-  physicalDocStatus: string;
 }) {
-  const currentIdx = overallStageIndex(overallStatus, physicalDocStatus);
+  const currentIdx = overallStageIndex(overallStatus);
   const total = OVERALL_STAGE_FLOW.length;
   const pad = 16;
   const width = 358;

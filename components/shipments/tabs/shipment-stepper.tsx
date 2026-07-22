@@ -2,27 +2,23 @@ import { OVERALL_STAGE_FLOW, overallStageIndex } from "@/lib/prototype-constants
 import { formatDubaiDate } from "@/lib/dates";
 
 /**
- * Item (screenshot audit): this used to show a hardcoded date-or-"Pending"
- * sub-label under every stage, driven ONLY by overall_status — so even
- * after a user genuinely updated Customs Status to "Submitted" elsewhere,
- * the "Submitted" stage here still just said "Pending", because it had
- * no idea Customs Status existed at all. Fixed by mapping each stage to
- * its actual, real, corresponding subprocess status field instead of a
- * generic placeholder — since those fields already default to "Pending"
- * and change the moment a user updates them, this shows exactly what was
- * asked for with no extra logic, just wiring in the real data.
- *
- * Deliberately NOT auto-advancing overallStatus itself from these
- * subprocess changes — that stays a separate, explicit, permission-gated
- * action via "Change Status" (change_shipment_status + status_transitions),
- * so a customs update can never silently bypass that gate.
+ * overall_status is now fully automatic — derived by
+ * fn_recalculate_shipment_progress from the 6 module statuses (see
+ * 20260101000025_auto_status_progression.sql). There's no more separate
+ * "Change Status" action to keep in sync with what this stepper shows;
+ * overall_status IS one of these 8 stage names directly, so the stepper
+ * simply reflects it. Each stage also shows its own real, live
+ * subprocess status underneath — since the stages are now literally
+ * named after the field driving them (Dubai Customs / customs_status,
+ * Dubai Municipality / municipality_status, etc.), that mapping is
+ * direct rather than approximate.
  */
 export function ShipmentStepper({
   overallStatus,
-  documentStatus,
   customsStatus,
-  municipalityStatus,
   deliveryOrderStatus,
+  municipalityStatus,
+  mofaicStatus,
   physicalDocStatus,
   createdAt,
 }: {
@@ -31,24 +27,24 @@ export function ShipmentStepper({
   customsStatus: string;
   municipalityStatus: string;
   deliveryOrderStatus: string;
+  mofaicStatus: string;
   physicalDocStatus: string;
   createdAt: string;
 }) {
-  const currentIdx = overallStageIndex(overallStatus, physicalDocStatus);
+  const currentIdx = overallStageIndex(overallStatus);
 
-  // One real subprocess status per stage — not every stage has a clean
-  // 1:1 subprocess mapping (there are 8 stages but 6 subprocess fields),
-  // so "Submitted" and "Customs Processing" both reflect customsStatus:
-  // that field's own lifecycle (Pending -> Submitted -> Declaration
-  // Created -> Under Review -> Approved) genuinely spans both stages,
-  // and showing the same live value in both is accurate, not redundant.
   const stageSubLabel: Record<number, string> = {
     0: formatDubaiDate(createdAt),
-    1: documentStatus,
-    2: customsStatus,
-    3: customsStatus,
-    4: municipalityStatus,
-    5: deliveryOrderStatus,
+    1: customsStatus,
+    2: deliveryOrderStatus,
+    3: municipalityStatus,
+    // "Documents at FFC HO" (stage 4) is driven by the originals_received
+    // boolean, not a status enum — this isn't passed as its own prop
+    // since the stage's own position already tells the same story: once
+    // this stage has genuinely been reached or passed, the underlying
+    // flag was true.
+    4: currentIdx >= 4 ? "Received" : "Pending",
+    5: mofaicStatus,
     6: physicalDocStatus,
     7: overallStatus === "Completed" ? "Completed" : "Pending",
   };

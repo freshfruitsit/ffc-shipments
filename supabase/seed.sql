@@ -70,12 +70,12 @@ begin
   insert into shipments (
     ref, mode, shipment_date, category_id, branch_id, supplier_name_snapshot, origin_country_id,
     priority, responsible, awb, airline_id, flight, eta, port_id, clearing_agent_id,
-    packages, net_weight, gross_weight, overall_status, document_status, customs_status,
+    packages, net_weight, gross_weight, document_status, customs_status,
     declaration_no, customs_submission_date, created_by, updated_by
   ) values (
     v_ref, 'Air', current_date, v_cat, v_branch, 'BE Fresh Produce B.V.', v_country,
     'Medium', v_responsible, '18272200481', v_airline, 'EK0905', now() + interval '2 days', v_port, v_clearing,
-    212, 4310.20, 5090, 'Customs Processing', 'Verified', 'Under Review',
+    212, 4310.20, 5090, 'Verified', 'Submitted',
     '6410299001', current_date, v_responsible, v_responsible
   ) returning id into v_shipment_id;
 
@@ -116,9 +116,9 @@ begin
   v_ref := generate_shipment_ref('AIR', extract(year from current_date)::int);
   insert into shipments (
     ref, mode, shipment_date, category_id, branch_id, supplier_name_snapshot, origin_country_id,
-    priority, responsible, overall_status, created_by, updated_by
+    priority, responsible, created_by, updated_by
   ) values (
     v_ref, 'Air', current_date, v_cat, v_branch, 'Andes Fruit Exports S.A.', v_country,
-    'Medium', v_responsible, 'Draft', v_responsible, v_responsible
+    'Medium', v_responsible, v_responsible, v_responsible
   );
 end $$;

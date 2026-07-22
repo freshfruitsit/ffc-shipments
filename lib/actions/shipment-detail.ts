@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyRpcError } from "@/lib/actions/errors";
-import type { OverallStatus } from "@/lib/types/database";
 
 export type ActionState = { error?: string; success?: boolean; fieldErrors?: Record<string, string> };
 
@@ -143,70 +142,12 @@ export async function assignShipmentAction(_prev: ActionState, formData: FormDat
   return { success: true };
 }
 
-const ChangeStatusSchema = z.object({
-  shipment_id: z.string().uuid(),
-  new_status: z.string().min(1),
-  reason: z.string().trim().optional(),
-});
-
-export async function changeShipmentStatusAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = ChangeStatusSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) {
-    return { error: "Invalid status change." };
-  }
-  const supabase = await createClient();
-  const d = parsed.data;
-  const { error } = await supabase.rpc("change_shipment_status", {
-    p_shipment_id: d.shipment_id,
-    // change_shipment_status validates this against status_transitions
-    // server-side — an invalid/disallowed transition is rejected there
-    // regardless of what the client sends, so a plain cast here is safe.
-    p_new_status: d.new_status as OverallStatus,
-    p_reason: d.reason || null,
-  });
-  if (error) return { error: friendlyRpcError(error.message) };
-  // Unlike Assign, this one genuinely needs the wider blast radius: every
-  // tab's edit controls check overall_status !== 'Completed' to decide
-  // whether they're enabled, so a status change can flip that on every
-  // single tab at once, not just change what the header displays. Plus
-  // the register's status column and the dashboard's status-based KPIs.
-  revalidatePath(`/shipments/${d.shipment_id}`, "layout");
-  revalidatePath("/shipments");
-  revalidatePath("/dashboard");
-  return { success: true };
-}
-
-const ConfirmCompletionSchema = z.object({
-  shipment_id: z.string().uuid(),
-  notes: z.string().trim().optional(),
-});
-
-/**
- * confirm_shipment_completion is deliberately separate from
- * change_shipment_status — status_transitions has no row targeting
- * 'Completed' on purpose (see the comment in 20260101000003_reference_data.sql).
- * This RPC existed and worked correctly since Module 2 but was never
- * actually wired into the frontend at all — there was no button anywhere
- * that called it, meaning no shipment could ever be marked Completed
- * through the app. Same class of gap as verify_document before it.
- */
-export async function confirmCompletionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = ConfirmCompletionSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) {
-    return { error: "Invalid request." };
-  }
-  const supabase = await createClient();
-  const d = parsed.data;
-  const { error } = await supabase.rpc("confirm_shipment_completion", {
-    p_shipment_id: d.shipment_id,
-    p_notes: d.notes || null,
-  });
-  if (error) return { error: friendlyRpcError(error.message) };
-  revalidatePath(`/shipments/${d.shipment_id}`, "layout");
-  revalidatePath("/shipments");
-  revalidatePath("/dashboard");
-  return { success: true };
-}
+// changeShipmentStatusAction and confirmCompletionAction removed entirely
+// — overall_status is now fully automatic, derived by
+// fn_recalculate_shipment_progress from the 6 module statuses (see
+// 20260101000025_auto_status_progression.sql). Neither
+// change_shipment_status nor confirm_shipment_completion exist as RPCs
+// anymore.
 
 const CommentSchema = z.object({
   shipment_id: z.string().uuid(),

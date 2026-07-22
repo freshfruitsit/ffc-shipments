@@ -6,10 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyRpcError } from "@/lib/actions/errors";
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
-const CUSTOMS_STATUSES = [
-  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
-  "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
-] as const;
+const CUSTOMS_STATUSES = ["Pending", "Draft", "Submitted", "Finished"] as const;
 
 const CustomsSchema = z.object({
   shipment_id: z.string().uuid(),
@@ -47,10 +44,7 @@ export async function updateCustomsAction(_prev: ActionState, formData: FormData
   return { success: true };
 }
 
-const MUNICIPALITY_STATUSES = [
-  "Not Required", "Pending", "Draft", "Submitted", "Under Review",
-  "Finished", "Rejected", "Resubmission Required",
-] as const;
+const MUNICIPALITY_STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Finished"] as const;
 
 const MunicipalitySchema = z.object({
   shipment_id: z.string().uuid(),

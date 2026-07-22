@@ -4,7 +4,6 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { FlightPathVisual } from "@/components/pwa/flight-path-visual";
-import { StatusDetailClient } from "@/components/pwa/status-detail-client";
 import { LiveFlightStatusCheck } from "@/components/shared/live-flight-status-check";
 import { STATUS_SEVERITY } from "@/lib/prototype-constants";
 import { formatDubaiDate } from "@/lib/dates";
@@ -13,8 +12,6 @@ type HeaderContext = {
   id: string; ref: string; supplier_name_snapshot: string; overall_status: string;
   eta: string | null; awb: string | null; flight: string | null; priority: string;
   responsible_name: string | null; port_name: string | null;
-  valid_status_transitions: { to_status: string; requires_reason: boolean }[];
-  permissions: { approve_status_change: boolean };
 };
 
 type Statuses = {
@@ -54,7 +51,7 @@ export default async function MobileShipmentDetail({ params }: { params: Promise
   ];
 
   return (
-    <div className="px-4 pt-4">
+    <div className="px-4 pt-4 pb-8">
       <Link href="/m" className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-ink-muted">
         <ChevronLeft className="h-4 w-4" /> Back
       </Link>
@@ -64,7 +61,7 @@ export default async function MobileShipmentDetail({ params }: { params: Promise
         <p className="text-[13px] text-ink-muted">{header.supplier_name_snapshot}</p>
       </div>
 
-      <FlightPathVisual overallStatus={header.overall_status} physicalDocStatus={statuses.physical_doc_status} />
+      <FlightPathVisual overallStatus={header.overall_status} />
 
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <InfoTile label="Overall Status"><StatusBadge status={header.overall_status} /></InfoTile>
@@ -80,6 +77,9 @@ export default async function MobileShipmentDetail({ params }: { params: Promise
       </div>
 
       <h2 className="mb-2 mt-5 font-display text-[13px] font-semibold text-ink">Module Status</h2>
+      <p className="mb-2 text-[11px] text-ink-muted">
+        Overall Status above updates automatically as these are updated — nothing to change manually.
+      </p>
       <div className="space-y-1.5">
         {statusRows.map((row) => (
           <div key={row.label} className="flex items-center justify-between rounded-lg border border-border bg-surface px-3.5 py-2.5">
@@ -92,12 +92,6 @@ export default async function MobileShipmentDetail({ params }: { params: Promise
           </div>
         ))}
       </div>
-
-      <StatusDetailClient
-        shipmentId={id}
-        canChangeStatus={header.valid_status_transitions.length > 0}
-        transitions={header.valid_status_transitions}
-      />
     </div>
   );
 }

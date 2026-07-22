@@ -10,9 +10,8 @@ import { STATUS_SEVERITY, SAVED_VIEWS } from "@/lib/prototype-constants";
 
 const PAGE_SIZE = 25;
 const VALID_STATUSES: OverallStatus[] = [
-  "Draft", "Documents Pending", "Ready for Submission", "Submitted", "Customs Processing",
-  "Clearance Pending", "Ready for Collection", "Received", "Completed", "On Hold", "Rejected",
-  "Resubmission Required", "Cancelled",
+  "Created", "Dubai Customs", "Delivery Order Received", "Dubai Municipality",
+  "Documents at FFC HO", "MOFAIC Completed", "Physical Documents Dispatched", "Completed",
 ];
 const VALID_VIEWS: Set<string> = new Set(SAVED_VIEWS.map((v) => v.key));
 

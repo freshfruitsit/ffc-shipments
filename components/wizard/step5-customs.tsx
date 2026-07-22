@@ -3,11 +3,8 @@
 import { useState, useTransition } from "react";
 import { updateCustomsAction, updateMunicipalityAction } from "@/lib/actions/portal-updates";
 
-const CUSTOMS_STATUSES = [
-  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
-  "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
-];
-const MUNICIPALITY_STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Under Review", "Finished", "Rejected", "Resubmission Required"];
+const CUSTOMS_STATUSES = ["Pending", "Draft", "Submitted", "Finished"];
+const MUNICIPALITY_STATUSES = ["Not Required", "Pending", "Draft", "Submitted", "Finished"];
 
 export function Step5Customs({
   shipmentId,

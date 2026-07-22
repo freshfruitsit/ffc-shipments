@@ -7,10 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, FormError, inputClass, selectClass } from "@/components/ui/form";
 import type { ActionState } from "@/lib/actions/shipment-detail";
 
-const STATUSES = [
-  "Pending", "Draft", "Request Created", "Submitted", "Declaration Created",
-  "Under Review", "Approved", "Rejected", "Resubmission Required", "Closed",
-];
+const STATUSES = ["Pending", "Draft", "Submitted", "Finished"];
 
 const initialState: ActionState = {};
 

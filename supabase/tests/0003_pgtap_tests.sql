@@ -5,7 +5,7 @@
 -- Wrapped in BEGIN/ROLLBACK: nothing here persists against seed data.
 -- ============================================================
 begin;
-select plan(42);
+select plan(41);
 
 create temp table t_fixture as
 select
@@ -78,7 +78,7 @@ set role authenticated;
 select set_config('app.current_user_id', (select dxb_customs::text from t_fixture), false);
 select set_config('app.current_role_claim', 'authenticated', false);
 select throws_ok(
-  $$ select update_customs((select auh_shipment from t_fixture), 'DECL-X', 'Approved', current_date, null, null) $$,
+  $$ select update_customs((select auh_shipment from t_fixture), 'DECL-X', 'Finished', current_date, null, null) $$,
   '42501', null, 'DXB customs_clearance_user cannot update_customs on an AUH shipment'
 );
 select throws_ok(
@@ -143,15 +143,6 @@ select is(
   false,
   'fn_is_shipment_completion_eligible() returns false live even though the cached column was forced to true'
 );
-
-set role authenticated;
-select set_config('app.current_user_id', (select dxb_supervisor::text from t_fixture), false);
-select set_config('app.current_role_claim', 'authenticated', false);
-select throws_ok(
-  $$ select confirm_shipment_completion((select dxb_shipment from t_fixture), 'test') $$,
-  '23514', null, 'confirm_shipment_completion rejects despite cached completion_eligible=true (live recheck works)'
-);
-reset role;
 
 set role authenticated;
 select set_config('app.current_user_id', (select dxb_customs::text from t_fixture), false);
@@ -348,8 +339,8 @@ set role authenticated;
 select set_config('app.current_user_id', (select dxb_customs::text from t_fixture), false);
 select set_config('app.current_role_claim', 'authenticated', false);
 select throws_ok(
-  $$ select update_customs((select dxb_shipment from t_fixture), null, 'Declaration Created', current_date, null, null) $$,
-  '23502', null, 'declaration number is required once customs_status reaches Declaration Created'
+  $$ select update_customs((select dxb_shipment from t_fixture), null, 'Submitted', current_date, null, null) $$,
+  '23502', null, 'declaration number is required once customs_status reaches Submitted'
 );
 select lives_ok(
   $$ select update_customs((select dxb_shipment from t_fixture), null, 'Pending', null, null, null) $$,
@@ -499,7 +490,7 @@ select lives_ok(
 );
 reset role;
 
-update shipments set overall_status = 'Customs Processing' where id = (select dxb_shipment from t_fixture2);
+update shipments set overall_status = 'Created' where id = (select dxb_shipment from t_fixture2);
 
 -- ============================================================
 -- Item 8: scheduler-only function access denial
@@ -1155,7 +1146,7 @@ rollback;
 -- DASHBOARD REBUILD — get_dashboard_metrics' new fields
 -- ============================================================
 begin;
-select plan(7);
+select plan(6);
 
 create temp table t_fixture_dash as
 select
@@ -1169,8 +1160,15 @@ grant select on t_fixture_dash to authenticated;
 -- passed ETA, so attention_required and the KPI counters have real,
 -- deterministic rows to find rather than relying on whatever the seed
 -- happens to contain.
-update shipments set customs_status = 'Rejected', overall_status = 'Customs Processing' where id = (select dxb_shipment from t_fixture_dash);
-update shipments set eta = now() - interval '2 days', overall_status = 'Customs Processing' where id = (select auh_shipment from t_fixture_dash);
+-- Force one DXB shipment to have a customs status that's still pending
+-- and a passed ETA, so attention_required and the KPI counters have
+-- real, deterministic rows to find rather than relying on whatever the
+-- seed happens to contain. (Customs rejections are tracked via
+-- Exceptions now, not a customs_status value — see the dashboard
+-- rebuild's own comment on why that specific alert was removed rather
+-- than duplicated.)
+update shipments set customs_status = 'Pending', overall_status = 'Created' where id = (select dxb_shipment from t_fixture_dash);
+update shipments set eta = now() - interval '2 days', overall_status = 'Created' where id = (select auh_shipment from t_fixture_dash);
 
 set role authenticated;
 select set_config('app.current_user_id', (select dxb_user::text from t_fixture_dash), false);
@@ -1190,13 +1188,6 @@ select ok(
   'status_distribution counts sum to exactly the caller''s own branch total (branch scoping honored)'
 );
 select ok(
-  (select exists (
-    select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
-    where elem->>'text' = 'Dubai Customs rejected the declaration' and elem->>'ref' = (select ref from shipments where id = (select dxb_shipment from t_fixture_dash))
-  )),
-  'attention_required includes the Dubai Customs rejection alert for the shipment just forced into that state'
-);
-select ok(
   (select not exists (
     select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
     where elem->>'ref' = (select ref from shipments where id = (select auh_shipment from t_fixture_dash))
@@ -1214,7 +1205,7 @@ select set_config('app.current_role_claim', 'authenticated', false);
 select ok(
   (select exists (
     select 1 from jsonb_array_elements(get_dashboard_metrics()->'attention_required') elem
-    where elem->>'text' = 'ETA passed but shipment not received' and elem->>'ref' = (select ref from shipments where id = (select auh_shipment from t_fixture_dash))
+    where elem->>'text' = 'ETA passed but shipment still at Created stage' and elem->>'ref' = (select ref from shipments where id = (select auh_shipment from t_fixture_dash))
   )),
   'a view_all_branches user sees the ETA-passed alert for a shipment in a DIFFERENT branch'
 );
@@ -1239,73 +1230,15 @@ select * from finish();
 rollback;
 
 -- ============================================================
--- REGRESSION TEST — change_shipment_status. A real bug shipped across two
--- migrations (20260101000011, 20260101000012) where this function checked
--- for a permission literally called 'update_status', which was never
--- created anywhere in this schema — meaning NO role, including
--- system_administrator, could ever change a shipment's overall status at
--- all. The bug went undetected because nothing in this suite exercised
--- change_shipment_status directly. This block exists specifically so
--- that gap can't happen silently again.
+-- change_shipment_status / status_transitions no longer exist — both
+-- were fully replaced by automatic status derivation (see
+-- 20260101000025_auto_status_progression.sql). The regression test that
+-- used to live here guarded a specific historical bug in that removed
+-- function (a bogus permission check that blocked every role); with the
+-- function itself gone, there's nothing meaningful left to test in its
+-- place. The new derivation engine has its own dedicated regression
+-- tests further down in this file instead.
 -- ============================================================
-begin;
-select plan(3);
-
-create temp table t_fixture_status as
-select
-  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
-  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
-  (select id from shipment_categories limit 1) as cat_id;
-grant select on t_fixture_status to authenticated;
-
-set role authenticated;
-select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
-select set_config('app.current_role_claim', 'authenticated', false);
-create temp table t_status_shipment as
-select id, ref from create_shipment(
-  'Air', current_date, (select cat_id from t_fixture_status), (select branch_id from t_fixture_status),
-  (select id from suppliers where is_active limit 1), 'Regression Test Co', (select id from countries limit 1), 'Medium',
-  (select admin_id from t_fixture_status), 'REGRESSION-STATUS-TEST', null
-);
-grant select on t_status_shipment to authenticated;
-reset role;
-
--- The exact real-world scenario that was broken: a system_administrator
--- (the highest-privilege role in the system) changing a fresh Draft
--- shipment's status at all.
-set role authenticated;
-select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
-select set_config('app.current_role_claim', 'authenticated', false);
-create temp table t_status_result as
-select overall_status from change_shipment_status((select id from t_status_shipment), 'Documents Pending', null);
-reset role;
-
-select is(
-  (select overall_status::text from t_status_result), 'Documents Pending',
-  'system_administrator can successfully change overall_status — the bogus update_status permission check is gone'
-);
-
--- The permission gate itself must still genuinely work — this isn't just
--- "no permission check ever runs now instead."
-select ok(
-  (select count(*)::int from status_transitions where required_permission is not null and required_permission != '') > 0,
-  'status_transitions still has real per-transition required_permission values driving the actual gate'
-);
-
--- A truly invalid transition (not just a permission issue) must still be
--- rejected — confirms fn_lock_shipment_for_mutation's null-permission
--- call didn't accidentally weaken the transition-validity check itself.
-set role authenticated;
-select set_config('app.current_user_id', (select admin_id::text from t_fixture_status), false);
-select set_config('app.current_role_claim', 'authenticated', false);
-select throws_ok(
-  format($$ select change_shipment_status(%L, 'Completed', null) $$, (select id::text from t_status_shipment)),
-  '23514', null, 'jumping straight from Documents Pending to Completed is still correctly rejected as an invalid transition'
-);
-reset role;
-
-select * from finish();
-rollback;
 
 -- ============================================================
 -- REGRESSION TEST — verify_document / archive_document. Two more real
@@ -1433,7 +1366,7 @@ rollback;
 -- completion-eligible state and confirm the RPC succeeds.
 -- ============================================================
 begin;
-select plan(3);
+select plan(4);
 
 create temp table t_fixture_complete as
 select
@@ -1452,64 +1385,77 @@ select id, ref from create_shipment(
   (select admin_id from t_fixture_complete), 'REGRESSION-COMPLETION-TEST', null
 );
 grant select on t_complete_shipment to authenticated;
-
--- Fresh Draft shipment: not remotely eligible, and confirm_shipment_completion
--- must reject it outright.
-select throws_ok(
-  format($$ select confirm_shipment_completion(%L, null) $$, (select id::text from t_complete_shipment)),
-  '23514', null, 'confirm_shipment_completion rejects a fresh Draft shipment as NOT_ELIGIBLE'
-);
 reset role;
 
--- Drive every subprocess to a genuine terminal state (direct UPDATE as
--- superuser here — the same pattern the rest of this suite already uses
--- to set up preconditions the RPCs themselves don't expose a path to
--- set directly; RLS correctly blocks this under the authenticated role,
--- which is exactly why it's done here instead).
-update shipments set
-  customs_status = 'Approved', municipality_status = 'Finished',
-  delivery_order_status = 'Verified', mofaic_status = 'Not Applicable', physical_doc_status = 'Closed'
-where id = (select id from t_complete_shipment);
+-- A fresh shipment isn't remotely eligible, and correctly sits at the
+-- very first stage.
+select is(
+  (select overall_status::text from shipments where id = (select id from t_complete_shipment)),
+  'Created', 'a fresh shipment starts at overall_status = Created'
+);
 
+-- Upload + verify the shipment's one document first (single-document-
+-- upload model — see 20260101000022 — not the old 5-type checklist).
+-- Order matters here: this needs to happen BEFORE the other subprocesses
+-- reach their terminal state, matching how this would actually unfold in
+-- practice (documents settle early; customs/municipality/delivery
+-- order/MOFAIC/physical docs resolve later). Doing it the other way
+-- around would have the shipment auto-complete — and lock itself
+-- read-only — the moment this one document is verified, which is a
+-- genuine, correct consequence of both designs working together, not a
+-- bug; it just isn't what this particular test is trying to exercise.
 set role authenticated;
 select set_config('app.current_user_id', (select admin_id::text from t_fixture_complete), false);
 select set_config('app.current_role_claim', 'authenticated', false);
-
--- Upload + verify all 5 required document types for this category.
 do $body$
 declare
   v_sid uuid := (select id from t_complete_shipment);
-  v_type record;
-  v_doc_id uuid;
+  v_doc_id uuid := gen_random_uuid();
   v_path text;
   v_ver_id uuid;
+  v_type_id uuid;
 begin
-  for v_type in select id from document_types where name in ('Commercial Invoice','Packing List','Air Waybill','Certificate of Origin','Health Certificate') loop
-    v_doc_id := gen_random_uuid();
-    v_path := 'shipments/' || v_sid::text || '/' || v_doc_id::text || '/f.pdf';
-    perform fn_register_upload_intent(v_sid, v_doc_id, v_path, 'application/pdf', 100, 'h');
-    select id into v_ver_id from upload_document_metadata(v_sid, v_doc_id, null, v_type.id, v_path, 'f.pdf', 'application/pdf', 100, 'h');
-    perform verify_document(v_ver_id, true, null);
-  end loop;
+  select id into v_type_id from document_types where name = 'Shipment Documents' limit 1;
+  v_path := 'shipments/' || v_sid::text || '/' || v_doc_id::text || '/f.pdf';
+  perform fn_register_upload_intent(v_sid, v_doc_id, v_path, 'application/pdf', 100, 'h');
+  select id into v_ver_id from upload_document_metadata(v_sid, v_doc_id, null, v_type_id, v_path, 'f.pdf', 'application/pdf', 100, 'h');
+  perform verify_document(v_ver_id, true, null);
 end $body$;
+reset role;
 
--- Drive overall_status through the full real transition chain to Received.
-select change_shipment_status((select id from t_complete_shipment), 'Documents Pending', null);
-select change_shipment_status((select id from t_complete_shipment), 'Ready for Submission', null);
-select change_shipment_status((select id from t_complete_shipment), 'Submitted', null);
-select change_shipment_status((select id from t_complete_shipment), 'Customs Processing', null);
-select change_shipment_status((select id from t_complete_shipment), 'Clearance Pending', null);
-select change_shipment_status((select id from t_complete_shipment), 'Ready for Collection', null);
-select change_shipment_status((select id from t_complete_shipment), 'Received', null);
+-- Now drive every remaining subprocess to a genuine terminal state
+-- (direct UPDATE as superuser here — the same pattern the rest of this
+-- suite already uses to set up preconditions the RPCs themselves don't
+-- expose a path to set directly; RLS correctly blocks this under the
+-- authenticated role, which is exactly why it's done here instead).
+-- This single UPDATE touches every remaining watched column at once, so
+-- the recalculation trigger fires exactly once, with everything
+-- (including the already-verified document) genuinely resolved — this
+-- is the moment auto-completion should actually happen.
+update shipments set
+  customs_status = 'Finished', municipality_status = 'Finished',
+  delivery_order_status = 'Verified', mofaic_status = 'Not Applicable', physical_doc_status = 'Closed'
+where id = (select id from t_complete_shipment);
 
+-- No manual action at all now — that single UPDATE above should have
+-- fired the recalculation trigger and driven overall_status straight to
+-- Completed on its own.
 select ok(
   (select completion_eligible from shipments where id = (select id from t_complete_shipment)),
-  'completion_eligible correctly becomes true once every subprocess reaches a terminal state at Received'
+  'completion_eligible correctly becomes true automatically once every subprocess reaches a terminal state'
 );
 
 select is(
-  (select overall_status::text from confirm_shipment_completion((select id from t_complete_shipment), 'regression test')),
-  'Completed', 'confirm_shipment_completion succeeds and sets overall_status to Completed once genuinely eligible'
+  (select overall_status::text from shipments where id = (select id from t_complete_shipment)),
+  'Completed', 'overall_status automatically becomes Completed the moment eligibility is reached — no manual action required'
+);
+
+-- fn_is_shipment_completion_eligible is the independent, freshly-computed
+-- check — confirms it agrees with the cached column, not just that the
+-- column itself says so.
+select ok(
+  (select fn_is_shipment_completion_eligible((select id from t_complete_shipment))),
+  'fn_is_shipment_completion_eligible independently confirms eligibility, not just trusting the cached column'
 );
 reset role;
 
@@ -1729,6 +1675,115 @@ select ok(
   'get_shipment_activity_tab genuinely caps at 100 events now — the old limit was written after jsonb_agg() and did nothing at all'
 );
 reset role;
+
+select * from finish();
+rollback;
+
+-- ============================================================
+-- REGRESSION TEST — automatic status progression engine
+-- (fn_recalculate_shipment_progress). Confirms each of the 8 stages is
+-- reached independently, in the right order, purely from subprocess
+-- status changes — no manual action anywhere in this test.
+-- ============================================================
+begin;
+select plan(9);
+
+create temp table t_fixture_progress as
+select
+  (select id from profiles where role = 'system_administrator' limit 1) as admin_id,
+  (select id from branches where code = 'DXB-AIR' limit 1) as branch_id,
+  (select id from shipment_categories limit 1) as cat_id,
+  (select id from suppliers where is_active limit 1) as supplier_id;
+grant select on t_fixture_progress to authenticated;
+
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_progress), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+create temp table t_progress_shipment as
+select id from create_shipment(
+  'Air', current_date, (select cat_id from t_fixture_progress), (select branch_id from t_fixture_progress),
+  (select supplier_id from t_fixture_progress), null, null, 'Medium',
+  (select admin_id from t_fixture_progress), 'REGRESSION-PROGRESS-TEST', null
+);
+grant select on t_progress_shipment to authenticated;
+reset role;
+
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Created', 'stage 1: a fresh shipment starts at Created'
+);
+
+update shipments set customs_status = 'Finished' where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Dubai Customs', 'stage 2: customs_status = Finished advances to Dubai Customs'
+);
+
+update shipments set delivery_order_status = 'Received from Carrier' where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Delivery Order Received', 'stage 3: delivery_order_status = Received from Carrier advances to Delivery Order Received'
+);
+
+update shipments set municipality_status = 'Finished' where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Dubai Municipality', 'stage 4: municipality_status = Finished advances to Dubai Municipality'
+);
+
+update shipments set originals_received = true where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Documents at FFC HO', 'stage 5: originals_received = true advances to Documents at FFC HO'
+);
+
+update shipments set mofaic_status = 'Not Applicable' where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'MOFAIC Completed', 'stage 6: mofaic_status = Not Applicable advances to MOFAIC Completed'
+);
+
+update shipments set physical_doc_status = 'Dispatched' where id = (select id from t_progress_shipment);
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Physical Documents Dispatched', 'stage 7: physical_doc_status = Dispatched advances to Physical Documents Dispatched'
+);
+
+-- Still not Completed — document_status hasn't been resolved yet, even
+-- though every other subprocess now sits at a terminal state.
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Physical Documents Dispatched', 'does NOT auto-complete while document_status is still unresolved, even with every other subprocess terminal'
+);
+
+-- Now resolve the last remaining piece — a blocking Critical exception
+-- should still hold it back even with everything else genuinely done.
+set role authenticated;
+select set_config('app.current_user_id', (select admin_id::text from t_fixture_progress), false);
+select set_config('app.current_role_claim', 'authenticated', false);
+select raise_exception((select id from t_progress_shipment), (select id from exception_types limit 1), 'Critical', 'blocking issue', null, null);
+reset role;
+
+do $body$
+declare
+  v_sid uuid := (select id from t_progress_shipment);
+  v_doc_id uuid := gen_random_uuid();
+  v_path text;
+  v_ver_id uuid;
+  v_type_id uuid;
+begin
+  select id into v_type_id from document_types where name = 'Shipment Documents' limit 1;
+  v_path := 'shipments/' || v_sid::text || '/' || v_doc_id::text || '/f.pdf';
+  perform fn_register_upload_intent(v_sid, v_doc_id, v_path, 'application/pdf', 100, 'h');
+  select id into v_ver_id from upload_document_metadata(v_sid, v_doc_id, null, v_type_id, v_path, 'f.pdf', 'application/pdf', 100, 'h');
+  perform verify_document(v_ver_id, true, null);
+end $body$;
+
+select is(
+  (select overall_status::text from shipments where id = (select id from t_progress_shipment)),
+  'Physical Documents Dispatched',
+  'a blocking Critical exception holds the shipment back from Completed even once every subprocess status is genuinely resolved'
+);
 
 select * from finish();
 rollback;

@@ -6,19 +6,14 @@ import { Search } from "lucide-react";
 
 const STATUS_OPTIONS = [
   "All statuses",
-  "Draft",
-  "Documents Pending",
-  "Ready for Submission",
-  "Submitted",
-  "Customs Processing",
-  "Clearance Pending",
-  "Ready for Collection",
-  "Received",
+  "Created",
+  "Dubai Customs",
+  "Delivery Order Received",
+  "Dubai Municipality",
+  "Documents at FFC HO",
+  "MOFAIC Completed",
+  "Physical Documents Dispatched",
   "Completed",
-  "On Hold",
-  "Rejected",
-  "Resubmission Required",
-  "Cancelled",
 ];
 
 export function RegisterFilterBar() {
